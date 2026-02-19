@@ -56,7 +56,7 @@ object Vehicle3DRenderer {
         Matrix.setIdentityM(modelMatrix, 0)
         
         // 1. 位置合わせ（ワールド座標への移動）
-        // glTFモデルはGltfLoaderで接地補正済みのため yOffset は 0
+        // GltfLoaderで底辺が y=0 になるように正規化されているため、そのまま playerWorldY で接地面に合います
         val yOffset = if (isGltfModel) 0.0f else 0.3f
         Matrix.translateM(modelMatrix, 0, state.playerWorldX, state.playerWorldY + yOffset, state.playerWorldZ)
         
@@ -64,13 +64,13 @@ object Vehicle3DRenderer {
         val rotationDeg = -Math.toDegrees(state.playerWorldHeading.toDouble()).toFloat()
         Matrix.rotateM(modelMatrix, 0, rotationDeg, 0f, 1f, 0f)
 
-        // 3. モデル固有の補正回転（glTFの軸変換）
-        if (isGltfModel) {
-            Matrix.rotateM(modelMatrix, 0, -90f, 1f, 0f, 0f)
-        }
+        // 3. モデル固有の補正回転
+        // glTF (Y-up) とゲームエンジン (Y-up) で軸が一致しているため、-90度回転は不要です。
+        // もしモデルが後ろを向いている場合は、ここで 180度回転 (0, 1, 0) を追加してください。
+        // Matrix.rotateM(modelMatrix, 0, 180f, 0f, 1f, 0f)
 
         // 4. 【重要】データベースのスペック（m）に合わせてスケーリング
-        // GltfLoaderで1.0に正規化されているため、スペック値をそのまま掛ければ正確なサイズになります
+        // GltfLoaderで 各軸 1.0 に正規化されているため、スペック値をそのまま掛ければ正確なサイズ（メートル）になります
         Matrix.scaleM(modelMatrix, 0, specs.widthM, specs.heightM, specs.lengthM)
         
         Matrix.multiplyMM(mvpMatrix, 0, vPMatrix, 0, modelMatrix, 0)
@@ -80,6 +80,8 @@ object Vehicle3DRenderer {
         GLES20.glVertexAttribPointer(GesoEngine3D.colorHandle, 4, GLES20.GL_FLOAT, false, 0, cBuf)
         GLES20.glEnableVertexAttribArray(GesoEngine3D.colorHandle)
         GLES20.glUniformMatrix4fv(GesoEngine3D.mvpMatrixHandle, 1, false, mvpMatrix, 0)
+        
+        // GL_UNSIGNED_SHORT を使用 (65535頂点まで対応)
         GLES20.glDrawElements(GLES20.GL_TRIANGLES, indexCount, GLES20.GL_UNSIGNED_SHORT, iBuf)
     }
 }
