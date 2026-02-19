@@ -2,6 +2,7 @@ package com.example.autorun.ui
 
 import android.graphics.*
 import android.os.Debug
+import android.view.MotionEvent
 import com.example.autorun.audio.EngineSoundRenderer
 import com.example.autorun.config.DeveloperSettings
 import com.example.autorun.config.GameSettings
@@ -17,6 +18,7 @@ import kotlin.math.*
 object HDUDebugOverlay {
     private val paint = Paint().apply { isAntiAlias = true }
     private val wavePath = Path()
+    private val resizePath = Path()
 
     enum class Category(val label: String) {
         OVERVIEW("概要"),
@@ -26,7 +28,7 @@ object HDUDebugOverlay {
         MEMORY("メモリ")
     }
 
-    var currentCategory = Category.OVERVIEW
+    var currentCategory = Category.MEMORY
 
     private const val SIDEBAR_WIDTH = 220f
     private const val DRAG_HANDLE_HEIGHT = 50f
@@ -93,12 +95,12 @@ object HDUDebugOverlay {
         drawContent(canvas, contentRect, state, fps, engineSound)
 
         paint.reset(); paint.color = Color.CYAN; paint.alpha = 180; paint.style = Paint.Style.FILL
-        val p = Path()
-        p.moveTo(resizeHandleRect.right, resizeHandleRect.top)
-        p.lineTo(resizeHandleRect.right, resizeHandleRect.bottom)
-        p.lineTo(resizeHandleRect.left, resizeHandleRect.bottom)
-        p.close()
-        canvas.drawPath(p, paint)
+        resizePath.reset()
+        resizePath.moveTo(resizeHandleRect.right, resizeHandleRect.top)
+        resizePath.lineTo(resizeHandleRect.right, resizeHandleRect.bottom)
+        resizePath.lineTo(resizeHandleRect.left, resizeHandleRect.bottom)
+        resizePath.close()
+        canvas.drawPath(resizePath, paint)
     }
 
     private fun drawContent(canvas: Canvas, rect: RectF, state: GameState, fps: Int, engineSound: EngineSoundRenderer?) {
@@ -246,22 +248,34 @@ object HDUDebugOverlay {
         paint.color = Color.WHITE; paint.textSize = 12f; val valText = "%.1f".format(value); canvas.drawText(valText, rect.centerX() - paint.measureText(valText) / 2f, rect.bottom + 20f, paint)
     }
 
-    fun handleTouch(x: Float, y: Float, engineSound: EngineSoundRenderer?): Boolean {
-        categoryRects.forEach { (cat, rect) -> if (rect.contains(x, y)) { currentCategory = cat; return true } }
+    fun handleTouch(action: Int, x: Float, y: Float, engineSound: EngineSoundRenderer?): Boolean {
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            categoryRects.forEach { (cat, rect) -> if (rect.contains(x, y)) { currentCategory = cat; return true } }
+        }
+
         when (currentCategory) {
             Category.SOUND -> {
-                if (engineToggleRect.contains(x, y)) { DeveloperSettings.isEngineSoundEnabled = !DeveloperSettings.isEngineSoundEnabled; return true }
-                if (exhaustToggleRect.contains(x, y)) { DeveloperSettings.isExhaustSoundEnabled = !DeveloperSettings.isExhaustSoundEnabled; return true }
-                if (turboToggleRect.contains(x, y)) { DeveloperSettings.isTurboSoundEnabled = !DeveloperSettings.isTurboSoundEnabled; return true }
-                if (windToggleRect.contains(x, y)) { DeveloperSettings.isWindSoundEnabled = !DeveloperSettings.isWindSoundEnabled; return true }
-                if (brakeToggleRect.contains(x, y)) { DeveloperSettings.isBrakeSoundEnabled = !DeveloperSettings.isBrakeSoundEnabled; return true }
-                if (tireToggleRect.contains(x, y)) { DeveloperSettings.isTireSquealEnabled = !DeveloperSettings.isTireSquealEnabled; return true }
-                if (jitterToggleRect.contains(x, y)) { DeveloperSettings.isEngineJitterEnabled = !DeveloperSettings.isEngineJitterEnabled; return true }
-                if (ghostToggleRect.contains(x, y)) { DeveloperSettings.isEngineGhostEnabled = !DeveloperSettings.isEngineGhostEnabled; return true }
+                if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+                    if (engineToggleRect.contains(x, y)) { DeveloperSettings.isEngineSoundEnabled = !DeveloperSettings.isEngineSoundEnabled; return true }
+                    if (exhaustToggleRect.contains(x, y)) { DeveloperSettings.isExhaustSoundEnabled = !DeveloperSettings.isExhaustSoundEnabled; return true }
+                    if (turboToggleRect.contains(x, y)) { DeveloperSettings.isTurboSoundEnabled = !DeveloperSettings.isTurboSoundEnabled; return true }
+                    if (windToggleRect.contains(x, y)) { DeveloperSettings.isWindSoundEnabled = !DeveloperSettings.isWindSoundEnabled; return true }
+                    if (brakeToggleRect.contains(x, y)) { DeveloperSettings.isBrakeSoundEnabled = !DeveloperSettings.isBrakeSoundEnabled; return true }
+                    if (tireToggleRect.contains(x, y)) { DeveloperSettings.isTireSquealEnabled = !DeveloperSettings.isTireSquealEnabled; return true }
+                    if (jitterToggleRect.contains(x, y)) { DeveloperSettings.isEngineJitterEnabled = !DeveloperSettings.isEngineJitterEnabled; return true }
+                    if (ghostToggleRect.contains(x, y)) { DeveloperSettings.isEngineGhostEnabled = !DeveloperSettings.isEngineGhostEnabled; return true }
+                }
             }
             Category.EQ_SETTINGS -> {
                 if (engineSound == null) return false
-                eqSliderRects.forEach { (idx, rect) -> if (rect.contains(x, y)) { val prg = 1f - ((y - rect.top) / rect.height()).coerceIn(0f, 1f); engineSound.eqGains[idx] = (-80f + prg * 80f).coerceIn(-80f, 0f); engineSound.updateFilters(); return true } }
+                eqSliderRects.forEach { (idx, rect) -> 
+                    if (rect.contains(x, y)) { 
+                        val prg = 1f - ((y - rect.top) / rect.height()).coerceIn(0f, 1f)
+                        engineSound.eqGains[idx] = (-80f + prg * 80f).coerceIn(-80f, 0f)
+                        engineSound.updateFilters()
+                        return true 
+                    } 
+                }
             }
             else -> {}
         }
