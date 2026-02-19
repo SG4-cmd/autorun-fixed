@@ -9,11 +9,18 @@ import java.nio.ByteOrder
 
 /**
  * 【GltfLoader: プロフェッショナル版】
- * モデルの比率を維持したまま正規化を行います。
+ * モデルを全軸の中心に配置し、接地計算用のデータを保持します。
  */
 object GltfLoader {
 
-    class ModelData(val vertices: FloatArray, val indices: ShortArray, val colors: FloatArray, val normals: FloatArray)
+    class ModelData(
+        val vertices: FloatArray,
+        val indices: ShortArray,
+        val colors: FloatArray,
+        val normals: FloatArray,
+        val minZ: Float, // 回転後に高さとなる軸の最小値
+        val maxZ: Float  // 回転後に高さとなる軸の最大値
+    )
 
     fun loadGlb(context: Context, fileName: String): ModelData? {
         return try {
@@ -71,7 +78,6 @@ object GltfLoader {
             val vArray = allVertices.toFloatArray()
             if (vArray.isEmpty()) return null
 
-            // --- 比率維持の正規化 ---
             var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE
             var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
             var minZ = Float.MAX_VALUE; var maxZ = -Float.MAX_VALUE
@@ -82,21 +88,24 @@ object GltfLoader {
                 minZ = minOf(minZ, vArray[i+2]); maxZ = maxOf(maxZ, vArray[i+2])
             }
 
-            val sX = maxX - minX
-            val sY = maxY - minY
-            val sZ = maxZ - minZ
-            // 最大の辺の長さを基準にする（比率を壊さないため）
-            val maxSize = maxOf(sX, maxOf(sY, sZ)).coerceAtLeast(0.001f)
+            val sizeX = maxX - minX
+            val sizeY = maxY - minY
+            val sizeZ = maxZ - minZ
+            val maxSize = maxOf(sizeX, maxOf(sizeY, sizeZ)).coerceAtLeast(0.001f)
 
+            // 全軸を中央(0)に寄せて正規化
             for (i in vArray.indices step 3) {
-                // X, Zは中央合わせ、Y（高さ）は接地（0）させる
                 vArray[i] = (vArray[i] - (maxX + minX) / 2f) / maxSize
-                vArray[i+1] = (vArray[i+1] - minY) / maxSize
+                vArray[i+1] = (vArray[i+1] - (maxY + minY) / 2f) / maxSize
                 vArray[i+2] = (vArray[i+2] - (maxZ + minZ) / 2f) / maxSize
             }
 
-            Log.i("GltfLoader", "Success: $fileName, Ratio Preserved. Scale Factor: $maxSize")
-            return ModelData(vArray, allIndices.toShortArray(), allColors.toFloatArray(), allNormals.toFloatArray())
+            // 回転後に「高さ」になるZ軸の正規化後の範囲を記録
+            val normMinZ = (minZ - (maxZ + minZ) / 2f) / maxSize
+            val normMaxZ = (maxZ - (maxZ + minZ) / 2f) / maxSize
+
+            Log.i("GltfLoader", "Normalized model centered. Height scale factor: $maxSize")
+            return ModelData(vArray, allIndices.toShortArray(), allColors.toFloatArray(), allNormals.toFloatArray(), normMinZ, normMaxZ)
         } catch (e: Exception) {
             Log.e("GltfLoader", "Error: ${e.message}"); null
         }

@@ -44,7 +44,8 @@ object GesoEngine3D {
     private fun loadDefaultModel(context: Context) {
         val model = GltfLoader.loadGlb(context, "car.glb")
         if (model != null) {
-            Vehicle3DRenderer.setModelData(model.vertices, model.colors, model.indices, model.normals)
+            // Vehicle3DRenderer.setModelData の引数を修正済みの定義に合わせる
+            Vehicle3DRenderer.setModelData(model)
         }
     }
 

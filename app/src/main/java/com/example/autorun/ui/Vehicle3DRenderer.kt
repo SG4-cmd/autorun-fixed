@@ -11,7 +11,7 @@ import java.nio.ShortBuffer
 
 /**
  * 【Vehicle3DRenderer】
- * モデルの比率を維持したまま、全長(lengthM)を基準にスケーリング。
+ * モデルを回転させた後の「底面」を計算し、地面にピッタリ接地させます。
  */
 object Vehicle3DRenderer {
 
@@ -21,18 +21,24 @@ object Vehicle3DRenderer {
     private var indexBuffer: ShortBuffer? = null
     private var indexCount: Int = 0
     private var isGltfModel: Boolean = false
+    
+    // 正規化後の高さ情報（接地計算用）
+    private var modelMinZ: Float = -0.5f
+    private var modelMaxZ: Float = 0.5f
 
     private val modelMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
 
-    fun setModelData(vertices: FloatArray, colors: FloatArray, indices: ShortArray, normals: FloatArray, isGltf: Boolean = true) {
-        indexCount = indices.size
+    fun setModelData(data: GltfLoader.ModelData, isGltf: Boolean = true) {
+        indexCount = data.indices.size
         isGltfModel = isGltf
+        modelMinZ = data.minZ
+        modelMaxZ = data.maxZ
         
-        vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(vertices); position(0) }
-        colorBuffer = ByteBuffer.allocateDirect(colors.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(colors); position(0) }
-        normalBuffer = ByteBuffer.allocateDirect(normals.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(normals); position(0) }
-        indexBuffer = ByteBuffer.allocateDirect(indices.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().apply { put(indices); position(0) }
+        vertexBuffer = ByteBuffer.allocateDirect(data.vertices.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(data.vertices); position(0) }
+        colorBuffer = ByteBuffer.allocateDirect(data.colors.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(data.colors); position(0) }
+        normalBuffer = ByteBuffer.allocateDirect(data.normals.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(data.normals); position(0) }
+        indexBuffer = ByteBuffer.allocateDirect(data.indices.size * 2).order(ByteOrder.nativeOrder()).asShortBuffer().apply { put(data.indices); position(0) }
     }
 
     fun draw(vPMatrix: FloatArray, state: GameState) {
@@ -44,23 +50,27 @@ object Vehicle3DRenderer {
         
         Matrix.setIdentityM(modelMatrix, 0)
         
-        // 1. 移動
-        val yOffset = if (isGltfModel) 0.0f else 0.3f
-        Matrix.translateM(modelMatrix, 0, state.playerWorldX, state.playerWorldY + yOffset, state.playerWorldZ)
+        // 1. 位置合わせ（ワールド座標）
+        // ベースの高さ(playerWorldY)に移動
+        Matrix.translateM(modelMatrix, 0, state.playerWorldX, state.playerWorldY, state.playerWorldZ)
         
         // 2. 進行方向（ヘディング）
         val rotationDeg = -Math.toDegrees(state.playerWorldHeading.toDouble()).toFloat()
         Matrix.rotateM(modelMatrix, 0, rotationDeg, 0f, 1f, 0f)
 
-        // 3. 起き上がり補正（X軸回転）
+        // 3. 【接地補正】
+        // モデルは中央(0,0,0)にあり、-90度X回転させると、元のZ軸が「高さ(Y)」になります。
+        // スケーリング(specs.lengthM)を考慮した「底面から中心までの距離」を持ち上げることで接地させます。
+        val scale = specs.lengthM
+        val yOffset = -modelMinZ * scale // modelMinZはマイナスの値なので、-でプラスにして持ち上げる
+        Matrix.translateM(modelMatrix, 0, 0f, yOffset, 0f)
+
+        // 4. 起き上がり補正（X軸回転）
         if (isGltfModel) {
             Matrix.rotateM(modelMatrix, 0, -90f, 1f, 0f, 0f)
         }
 
-        // 4. 【重要】比率を維持した全長スケーリング
-        // GltfLoader側で「最大辺=1.0」としてアスペクト比を維持したまま正規化されています。
-        // そのため、全長(lengthM)を全軸に均等に掛けることで、歪まずに正しいサイズになります。
-        val scale = specs.lengthM
+        // 5. スケーリング
         Matrix.scaleM(modelMatrix, 0, scale, scale, scale)
         
         Matrix.multiplyMM(mvpMatrix, 0, vPMatrix, 0, modelMatrix, 0)
