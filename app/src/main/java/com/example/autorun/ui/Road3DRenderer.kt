@@ -36,7 +36,6 @@ object Road3DRenderer {
         val gH = GameSettings.GUARDRAIL_HEIGHT
         val gPH = GameSettings.GUARDRAIL_PLATE_HEIGHT
 
-        // 修正点: 描画開始位置を playerDist - 50f に変更し、車体後方も描画対象に含める
         val startIdx = ((playerDist - 50f) / segLen).toInt().coerceAtLeast(0)
         val endIdx = ((playerDist + 500f) / segLen).toInt().coerceAtMost(CourseManager.getTotalSegments() - 1)
 
@@ -59,8 +58,8 @@ object Road3DRenderer {
             // 3. 芝生
             val gL1 = getRoadPoints(i.toFloat(), halfW + grassW)
             val gL2 = getRoadPoints((i + 1).toFloat(), halfW + grassW)
-            addQuad(gL1.lx, r1.y - 0.02f, gL1.lz, r1.lx, r1.y - 0.02f, r1.lz, gL2.lx, r2.y - 0.02f, gL2.lz, r2.lx, r2.y - 0.02f, r2.lz, GameSettings.COLOR_GRASS_DARK)
-            addQuad(r1.rx, r1.y - 0.02f, r1.rz, gL1.rx, r1.y - 0.02f, gL1.rz, r2.rx, r2.y - 0.02f, r2.rz, gL2.rx, r2.y - 0.02f, r2.rz, GameSettings.COLOR_GRASS_DARK)
+            addQuad(gL1.lx, r1.y - 0.02f, gL1.lz, r1.lx, r1.y - 0.02f, r1.lz, gL2.lx, r2.y - 0.02f, gL2.lz, r2.lx, r2.y - 0.02f, r2.rz, GameSettings.COLOR_GRASS_DARK)
+            addQuad(r1.rx, r1.y - 0.02f, r1.rz, gL1.rx, r1.y - 0.02f, r1.rz, r2.rx, r2.y - 0.02f, r2.rz, gL2.rx, r2.y - 0.02f, r2.rz, GameSettings.COLOR_GRASS_DARK)
 
             // 4. ガードレール
             addQuad(r1.lx, r1.y + gH, r1.lz, r1.lx, r1.y + gH - gPH, r1.lz,
@@ -90,6 +89,13 @@ object Road3DRenderer {
     private fun render(mvpMatrix: FloatArray) {
         if (vertexCount == 0) return
         vertexBuffer.position(0); colorBuffer.position(0)
+        
+        // --- 道路用の固定法線 (真上) を設定 ---
+        if (GesoEngine3D.normalHandle != -1) {
+            GLES20.glDisableVertexAttribArray(GesoEngine3D.normalHandle)
+            GLES20.glVertexAttrib3f(GesoEngine3D.normalHandle, 0f, 1f, 0f)
+        }
+
         GLES20.glVertexAttribPointer(GesoEngine3D.positionHandle, 3, GLES20.GL_FLOAT, false, 0, vertexBuffer)
         GLES20.glEnableVertexAttribArray(GesoEngine3D.positionHandle)
         GLES20.glVertexAttribPointer(GesoEngine3D.colorHandle, 4, GLES20.GL_FLOAT, false, 0, colorBuffer)

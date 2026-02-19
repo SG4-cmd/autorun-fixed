@@ -9,7 +9,7 @@ import kotlin.math.sin
 
 /**
  * 【GesoEngine3D】
- * 3Dグラフィックエンジンの心臓部。glTF形式のモデル読み込みに対応。
+ * 3Dグラフィックエンジンの心臓部。アルファブレンディングを有効化。
  */
 object GesoEngine3D {
     private var program: Int = 0
@@ -25,6 +25,11 @@ object GesoEngine3D {
     fun init(context: Context) {
         GLES20.glClearColor(0.53f, 0.81f, 0.92f, 1.0f)
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+        
+        // --- 透過（アルファブレンディング）の有効化 ---
+        GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+
         program = GLESShader.createProgram(GLESShader.VERTEX_SHADER_CODE, GLESShader.FRAGMENT_SHADER_CODE)
         GLES20.glUseProgram(program)
 
