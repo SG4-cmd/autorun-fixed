@@ -7,8 +7,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * 【GltfLoader】
- * モデルを読み込み、サイズを1.0に正規化してデータベースでの制御を容易にします。
+ * 【GltfLoader: プロフェッショナル版】
+ * モデルを正しく正規化し、かつ色（頂点カラー）情報も読み込みます。
  */
 object GltfLoader {
 
@@ -21,84 +21,108 @@ object GltfLoader {
             inputStream.close()
 
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-            if (buffer.int != 0x46546C67) throw Exception("Invalid Magic")
+            if (buffer.int != 0x46546C67) throw Exception("Invalid GLB")
             buffer.int; buffer.int
 
             val jsonLength = buffer.int
-            if (buffer.int != 0x4E4F534A) throw Exception("No JSON")
+            buffer.int // JSON type
             val jsonBytes = ByteArray(jsonLength)
             buffer.get(jsonBytes)
             val json = JSONObject(String(jsonBytes))
 
-            buffer.int; buffer.int
+            buffer.int // BIN length
+            buffer.int // BIN type
             val binBuffer = buffer.slice().order(ByteOrder.LITTLE_ENDIAN)
 
             val allVertices = mutableListOf<Float>()
             val allIndices = mutableListOf<Short>()
+            val allColors = mutableListOf<Float>()
+
             val meshes = json.getJSONArray("meshes")
-            
             for (m in 0 until meshes.length()) {
                 val primitives = meshes.getJSONObject(m).getJSONArray("primitives")
                 for (p in 0 until primitives.length()) {
                     val primitive = primitives.getJSONObject(p)
                     val attributes = primitive.getJSONObject("attributes")
-                    if (!attributes.has("POSITION")) continue
-
+                    
                     val currentVertexOffset = (allVertices.size / 3).toShort()
+                    
+                    // 頂点座標
                     val vData = getFloatArray(json, binBuffer, attributes.getInt("POSITION"))
                     allVertices.addAll(vData.toList())
 
+                    // インデックス
                     if (primitive.has("indices")) {
                         val iData = getShortArray(json, binBuffer, primitive.getInt("indices"))
                         for (idx in iData) allIndices.add((idx + currentVertexOffset).toShort())
+                    }
+
+                    // 頂点カラー (COLOR_0)
+                    if (attributes.has("COLOR_0")) {
+                        val cData = getFloatArray(json, binBuffer, attributes.getInt("COLOR_0"), isColor = true)
+                        allColors.addAll(cData.toList())
                     } else {
-                        for (i in 0 until vData.size / 3) allIndices.add((i + currentVertexOffset).toShort())
+                        // カラーがない場合はデフォルトのグレーを追加
+                        for (i in 0 until vData.size / 3) {
+                            allColors.add(0.7f); allColors.add(0.7f); allColors.add(0.7f); allColors.add(1.0f)
+                        }
                     }
                 }
             }
 
-            // --- プロ仕様の正規化プロセス ---
+            // --- 正規化と軸補正 ---
             val vArray = allVertices.toFloatArray()
-            var minX = Float.MAX_VALUE; var maxX = Float.MIN_VALUE
-            var minY = Float.MAX_VALUE; var maxY = Float.MIN_VALUE
-            var minZ = Float.MAX_VALUE; var maxZ = Float.MIN_VALUE
+            var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE
+            var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
+            var minZ = Float.MAX_VALUE; var maxZ = -Float.MAX_VALUE
 
             for (i in vArray.indices step 3) {
-                if (vArray[i] < minX) minX = vArray[i]; if (vArray[i] > maxX) maxX = vArray[i]
-                if (vArray[i+1] < minY) minY = vArray[i+1]; if (vArray[i+1] > maxY) maxY = vArray[i+1]
-                if (vArray[i+2] < minZ) minZ = vArray[i+2]; if (vArray[i+2] > maxZ) maxZ = vArray[i+2]
+                minX = minOf(minX, vArray[i]); maxX = maxOf(maxX, vArray[i])
+                minY = minOf(minY, vArray[i+1]); maxY = maxOf(maxY, vArray[i+1])
+                minZ = minOf(minZ, vArray[i+2]); maxZ = maxOf(maxZ, vArray[i+2])
             }
 
-            val sizeX = maxX - minX; val sizeY = maxY - minY; val sizeZ = maxZ - minZ
-            val centerX = (maxX + minX) / 2f
-            val centerZ = (maxZ + minZ) / 2f
+            // 長さが0にならないようにガード
+            val sizeX = (maxX - minX).let { if (it == 0f) 1f else it }
+            val sizeY = (maxY - minY).let { if (it == 0f) 1f else it }
+            val sizeZ = (maxZ - minZ).let { if (it == 0f) 1f else it }
 
             for (i in vArray.indices step 3) {
-                // 中心を(0,0)に、底を0にする。さらに各軸を1.0の範囲にスケーリング
-                vArray[i] = (vArray[i] - centerX) / sizeX
+                // 中心を0に、底を0にする（スケーリング前に実施）
+                vArray[i] = (vArray[i] - (maxX + minX) / 2f) / sizeX
                 vArray[i+1] = (vArray[i+1] - minY) / sizeY
-                vArray[i+2] = (vArray[i+2] - centerZ) / sizeZ
+                vArray[i+2] = (vArray[i+2] - (maxZ + minZ) / 2f) / sizeZ
             }
 
-            val colors = FloatArray((vArray.size / 3) * 4) { i -> if (i % 4 == 3) 1.0f else 0.8f }
-            ModelData(vArray, allIndices.toShortArray(), colors)
+            Log.i("GltfLoader", "Done: $fileName, Verts: ${vArray.size/3}")
+            ModelData(vArray, allIndices.toShortArray(), allColors.toFloatArray())
         } catch (e: Exception) {
-            Log.e("GltfLoader", "Load Error: ${e.message}"); null
+            Log.e("GltfLoader", "Err: ${e.message}"); null
         }
     }
 
-    private fun getFloatArray(json: JSONObject, binBuffer: ByteBuffer, accessorIdx: Int): FloatArray {
+    private fun getFloatArray(json: JSONObject, binBuffer: ByteBuffer, accessorIdx: Int, isColor: Boolean = false): FloatArray {
         val accessor = json.getJSONArray("accessors").getJSONObject(accessorIdx)
         val view = json.getJSONArray("bufferViews").getJSONObject(accessor.getInt("bufferView"))
+        val count = accessor.getInt("count")
+        val type = accessor.getString("type") // "VEC3" or "VEC4"
+        val numComponents = if (type == "VEC4") 4 else 3
+        
         binBuffer.position(view.optInt("byteOffset", 0) + accessor.optInt("byteOffset", 0))
-        return FloatArray(accessor.getInt("count") * 3) { binBuffer.float }
+        
+        val result = FloatArray(count * numComponents)
+        for (i in result.indices) result[i] = binBuffer.float
+        return result
     }
 
     private fun getShortArray(json: JSONObject, binBuffer: ByteBuffer, accessorIdx: Int): ShortArray {
         val accessor = json.getJSONArray("accessors").getJSONObject(accessorIdx)
         val view = json.getJSONArray("bufferViews").getJSONObject(accessor.getInt("bufferView"))
-        val type = accessor.getInt("componentType")
+        val count = accessor.getInt("count")
+        val componentType = accessor.getInt("componentType")
         binBuffer.position(view.optInt("byteOffset", 0) + accessor.optInt("byteOffset", 0))
-        return ShortArray(accessor.getInt("count")) { if (type == 5123) binBuffer.short else (binBuffer.int and 0xFFFF).toShort() }
+        return ShortArray(count) {
+            if (componentType == 5123) binBuffer.short else (binBuffer.int and 0xFFFF).toShort()
+        }
     }
 }
