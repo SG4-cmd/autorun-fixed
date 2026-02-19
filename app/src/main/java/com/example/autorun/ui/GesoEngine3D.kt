@@ -20,6 +20,7 @@ object GesoEngine3D {
     var mvpMatrixHandle: Int = -1
     var positionHandle: Int = -1
     var colorHandle: Int = -1
+    var normalHandle: Int = -1
 
     fun init(context: Context) {
         GLES20.glClearColor(0.53f, 0.81f, 0.92f, 1.0f)
@@ -30,38 +31,15 @@ object GesoEngine3D {
         mvpMatrixHandle = GLES20.glGetUniformLocation(program, "uMVPMatrix")
         positionHandle = GLES20.glGetAttribLocation(program, "vPosition")
         colorHandle = GLES20.glGetAttribLocation(program, "vColor")
+        normalHandle = GLES20.glGetAttribLocation(program, "vNormal")
 
-        // 業界標準のglTF (glb) モデルを読み込む
         loadDefaultModel(context)
     }
 
     private fun loadDefaultModel(context: Context) {
-        // assets/car.glb を読み込む
         val model = GltfLoader.loadGlb(context, "car.glb")
-        
         if (model != null) {
-            Vehicle3DRenderer.setModelData(model.vertices, model.colors, model.indices)
-        } else {
-            // ファイルがない場合のフォールバック（以前の立方体データをインデックス形式で生成）
-            val dummyVertices = floatArrayOf(
-                -0.5f, -0.5f,  0.5f,   0.5f, -0.5f,  0.5f,   0.5f,  0.5f,  0.5f,  -0.5f,  0.5f,  0.5f, // Front
-                -0.5f, -0.5f, -0.5f,   0.5f, -0.5f, -0.5f,   0.5f,  0.5f, -0.5f,  -0.5f,  0.5f, -0.5f  // Back
-            )
-            val dummyIndices = shortArrayOf(
-                0, 1, 2, 0, 2, 3, // Front
-                4, 5, 6, 4, 6, 7, // Back
-                3, 2, 6, 3, 6, 7, // Top
-                0, 1, 5, 0, 5, 4, // Bottom
-                0, 3, 7, 0, 7, 4, // Left
-                1, 2, 6, 1, 6, 5  // Right
-            )
-            // 立方体の全頂点（24頂点）が必要だが、ここでは簡略化して8頂点+インデックスで構成
-            val fullVertices = floatArrayOf(
-                -0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,
-                -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f
-            )
-            val colors = FloatArray((fullVertices.size / 3) * 4) { i -> if (i % 4 == 3) 1.0f else 1.0f }
-            Vehicle3DRenderer.setModelData(fullVertices, colors, dummyIndices)
+            Vehicle3DRenderer.setModelData(model.vertices, model.colors, model.indices, model.normals)
         }
     }
 

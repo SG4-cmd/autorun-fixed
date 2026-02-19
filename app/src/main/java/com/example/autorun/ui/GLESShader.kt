@@ -8,18 +8,26 @@ object GLESShader {
         uniform mat4 uMVPMatrix;
         attribute vec4 vPosition;
         attribute vec4 vColor;
+        attribute vec3 vNormal;
         varying vec4 _color;
+        varying float _diffuse;
         void main() {
             gl_Position = uMVPMatrix * vPosition;
             _color = vColor;
+            // 簡易的な平行光源 (右上から光を当てる)
+            vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
+            // 法線と光の方向から明るさを計算 (最低 0.3 の明るさを確保)
+            _diffuse = max(dot(normalize(vNormal), lightDir), 0.3);
         }
     """
 
     const val FRAGMENT_SHADER_CODE = """
         precision mediump float;
         varying vec4 _color;
+        varying float _diffuse;
         void main() {
-            gl_FragColor = _color;
+            // 色に明るさを掛けて出力
+            gl_FragColor = vec4(_color.rgb * _diffuse, _color.a);
         }
     """
 
