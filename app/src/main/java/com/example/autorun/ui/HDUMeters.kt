@@ -68,7 +68,10 @@ object HDUMeters {
         val thickness = GameSettings.STEER_WHEEL_THICKNESS * GameSettings.UI_SCALE_STEER
         prepareSteerWheelBitmap(thickness, radius)
         val bitmap = steerWheelBitmap ?: return
+        
+        // 修正点: ハンドルの回転方向を入力(steeringInput)と同期 (マイナスを削除)
         val totalRotation = state.steeringInput * GameSettings.STEER_MAX_ANGLE
+        
         genericPaint.alpha = (255 * alpha).toInt()
         canvas.save()
         canvas.translate(rect.centerX(), rect.centerY())
@@ -84,12 +87,9 @@ object HDUMeters {
     fun drawBrakePedal(canvas: Canvas, state: GameState, rect: RectF, font: Typeface?) {
         val sB = GameSettings.UI_SCALE_BRAKE
         val alpha = GameSettings.UI_ALPHA_BRAKE
-        
-        // 元の右端を50%削り、よりスリムな形状にする
         val clipW = rect.width() * 0.3f
         val clipH = rect.height() * 0.3f
-        val slimRight = rect.right - (clipW * 0.5f) // 右側をさらに削る
-        
+        val slimRight = rect.right - (clipW * 0.5f)
         brakePath.reset()
         brakePath.moveTo(rect.left, rect.top)
         brakePath.lineTo(slimRight, rect.top)
@@ -98,11 +98,9 @@ object HDUMeters {
         brakePath.lineTo(slimRight - (clipW * 0.5f), rect.bottom)
         brakePath.lineTo(rect.left, rect.bottom)
         brakePath.close()
-        
         brakeStrokePaint.color = Color.BLACK; brakeStrokePaint.alpha = (100 * alpha).toInt(); brakeStrokePaint.strokeWidth = 12f * sB; canvas.drawPath(brakePath, brakeStrokePaint)
         brakeStrokePaint.color = Color.WHITE; brakeStrokePaint.alpha = (180 * alpha).toInt(); brakeStrokePaint.strokeWidth = 3f * sB; canvas.drawPath(brakePath, brakeStrokePaint)
         brakeFillPaint.color = if (state.isBraking) Color.parseColor("#AA0000") else Color.parseColor("#333333"); brakeFillPaint.alpha = (255 * alpha).toInt(); canvas.drawPath(brakePath, brakeFillPaint)
-        
         brakeStrokePaint.color = Color.BLACK; brakeStrokePaint.alpha = (150 * alpha).toInt(); brakeStrokePaint.strokeWidth = 6f * sB
         val slitMargin = 20f * sB
         for (i in 1..4) { 
@@ -178,41 +176,23 @@ object HDUMeters {
         borderPaint.color = Color.WHITE; borderPaint.strokeWidth = 3f * sG; canvas.drawCircle(cx, cy, radius, borderPaint)
         borderPaint.color = Color.BLACK
         textPaint.color = Color.WHITE; textPaint.alpha = (255 * alpha).toInt(); textPaint.textSize = radius * 0.22f; textPaint.typeface = Typeface.DEFAULT_BOLD
-        
-        // メモリ描画 (-1.0 to 2.0)
         val range = maxVal - minVal
         val labels = listOf(-1.0f, -0.5f, 0.0f, 0.5f, 1.0f, 1.5f, 2.0f)
-        
         for (labelVal in labels) {
             val ratio = (labelVal - minVal) / range
             val angle = 135f + ratio * 270f
-            val rad = Math.toRadians(angle.toDouble())
-            val cosA = cos(rad).toFloat()
-            val sinA = sin(rad).toFloat()
-            
-            // 目盛りの線
+            val rad = Math.toRadians(angle.toDouble()); val cosA = cos(rad).toFloat(); val sinA = sin(rad).toFloat()
             val lineLength = if (labelVal == labelVal.toInt().toFloat()) 0.15f else 0.08f
             canvas.drawLine(cx + (radius * (1f - lineLength) * cosA), cy + (radius * (1f - lineLength) * sinA), cx + (radius * 0.98f * cosA), cy + (radius * 0.98f * sinA), textPaint)
-            
-            // 数値ラベル
             if (labelVal == -1.0f || labelVal == 0.0f || labelVal == 1.0f || labelVal == 2.0f) {
                 val labelText = if (labelVal == 0.0f) "0" else "%.1f".format(labelVal)
-                val tx = cx + (radius * 0.65f * cosA)
-                val ty = cy + (radius * 0.65f * sinA)
-                canvas.drawText(labelText, tx - textPaint.measureText(labelText) / 2f, ty + textPaint.textSize / 3f, textPaint)
+                val tx = cx + (radius * 0.65f * cosA); val ty = cy + (radius * 0.65f * sinA); canvas.drawText(labelText, tx - textPaint.measureText(labelText) / 2f, ty + textPaint.textSize / 3f, textPaint)
             }
         }
-        
-        textPaint.textSize = radius * 0.18f
-        canvas.drawText("bar", cx - textPaint.measureText("bar") / 2f, cy + radius * 0.35f, textPaint)
-        canvas.drawText("BOOST", cx - textPaint.measureText("BOOST") / 2f, cy + radius * 0.55f, textPaint)
-        
-        // 針の角度計算
+        textPaint.textSize = radius * 0.18f; canvas.drawText("bar", cx - textPaint.measureText("bar") / 2f, cy + radius * 0.35f, textPaint); canvas.drawText("BOOST", cx - textPaint.measureText("BOOST") / 2f, cy + radius * 0.55f, textPaint)
         val needleRatio = (value - minVal) / range
-        val needleAngle = 135f + needleRatio.coerceIn(0f, 1f) * 270f
-        needlePaint.alpha = (255 * alpha).toInt()
+        val needleAngle = 135f + needleRatio.coerceIn(0f, 1f) * 270f; needlePaint.alpha = (255 * alpha).toInt()
         drawTaperedNeedle(canvas, cx, cy, radius * 0.85f, needleAngle, radius * 0.08f)
-
         brakeFillPaint.color = Color.BLACK; brakeFillPaint.alpha = (255 * alpha).toInt(); canvas.drawCircle(cx, cy, radius * 0.12f, brakeFillPaint)
     }
 
