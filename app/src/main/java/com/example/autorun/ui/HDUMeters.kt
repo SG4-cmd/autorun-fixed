@@ -19,7 +19,7 @@ import kotlin.math.sin
 
 /**
  * 【HDUMeters】
- * 個別のメーター・UIパーツの描画を担当するオブジェクト。
+ * 個別のメーター・UIパーツの描画を担当。
  */
 object HDUMeters {
     private var meterBgColor = Color.parseColor("#1A1A1A")
@@ -50,28 +50,32 @@ object HDUMeters {
     }
 
     fun drawTachometer(canvas: Canvas, state: GameState, rect: RectF) {
+        if (rect.width() <= 0) return
         val specs = VehicleDatabase.getSelectedVehicle()
         drawRPMGauge(canvas, state.engineRPM, specs.maxRedzone, specs.minRedzone, rect.centerX(), rect.centerY(), rect.width() / 2f)
     }
 
     fun drawSpeedometer(canvas: Canvas, state: GameState, rect: RectF, font: Typeface?) {
+        if (rect.width() <= 0) return
         drawSpeedGauge(canvas, state.calculatedSpeedKmH, 320f, rect.centerX(), rect.centerY(), rect.width() / 2f, font)
     }
 
     fun drawBoostGauge(canvas: Canvas, state: GameState, rect: RectF) {
+        if (rect.width() <= 0) return
         drawBoostGauge(canvas, state.turboBoost, -1.0f, 2.0f, rect.centerX(), rect.centerY(), rect.width() / 2f)
     }
 
     fun drawSteeringWheel(canvas: Canvas, state: GameState, rect: RectF) {
+        if (rect.width() <= 0) return
         val alpha = GameSettings.UI_ALPHA_STEER
         val radius = rect.width() / 2f
         val thickness = GameSettings.STEER_WHEEL_THICKNESS * GameSettings.UI_SCALE_STEER
+        if (radius <= 0 || thickness <= 0) return
+        
         prepareSteerWheelBitmap(thickness, radius)
         val bitmap = steerWheelBitmap ?: return
         
-        // 修正点: ハンドルの回転方向を入力(steeringInput)と同期 (マイナスを削除)
         val totalRotation = state.steeringInput * GameSettings.STEER_MAX_ANGLE
-        
         genericPaint.alpha = (255 * alpha).toInt()
         canvas.save()
         canvas.translate(rect.centerX(), rect.centerY())
@@ -85,6 +89,7 @@ object HDUMeters {
     }
 
     fun drawBrakePedal(canvas: Canvas, state: GameState, rect: RectF, font: Typeface?) {
+        if (rect.width() <= 0) return
         val sB = GameSettings.UI_SCALE_BRAKE
         val alpha = GameSettings.UI_ALPHA_BRAKE
         val clipW = rect.width() * 0.3f
@@ -114,18 +119,30 @@ object HDUMeters {
 
     private fun prepareSteerWheelBitmap(thickness: Float, radius: Float) {
         if (steerWheelBitmap != null && lastSteerWheelThickness == thickness && lastSteerWheelRadius == radius) return
+        if (radius <= 0 || thickness <= 0) return
         steerWheelBitmap?.recycle()
         val size = ((radius + thickness) * 2.2f).toInt()
+        if (size <= 0) return
+        
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val cx = size / 2f; val cy = size / 2f
-        val hubRadius = radius * 0.24f; val spokeThickness = thickness * 0.75f
-        genericPaint.reset(); genericPaint.isAntiAlias = true; genericPaint.style = Paint.Style.FILL
-        genericPaint.shader = RadialGradient(cx, cy, hubRadius, intArrayOf(Color.parseColor("#444444"), Color.BLACK), null, Shader.TileMode.CLAMP)
-        canvas.drawCircle(cx, cy, hubRadius, genericPaint)
+        val hubRadius = radius * 0.24f
+        val spokeThickness = thickness * 0.75f
+        
+        if (hubRadius > 0) {
+            genericPaint.reset(); genericPaint.isAntiAlias = true; genericPaint.style = Paint.Style.FILL
+            genericPaint.shader = RadialGradient(cx, cy, hubRadius, intArrayOf(Color.parseColor("#444444"), Color.BLACK), null, Shader.TileMode.CLAMP)
+            canvas.drawCircle(cx, cy, hubRadius, genericPaint)
+        }
+        
         genericPaint.shader = null; genericPaint.style = Paint.Style.STROKE; genericPaint.strokeWidth = thickness
-        genericPaint.shader = RadialGradient(cx, cy, radius + thickness/2, intArrayOf(Color.parseColor("#333333"), Color.BLACK, Color.parseColor("#222222")), floatArrayOf(0.85f, 0.92f, 1.0f), Shader.TileMode.CLAMP)
-        canvas.drawCircle(cx, cy, radius, genericPaint)
+        val gradRadius = radius + thickness / 2f
+        if (gradRadius > 0) {
+            genericPaint.shader = RadialGradient(cx, cy, gradRadius, intArrayOf(Color.parseColor("#333333"), Color.BLACK, Color.parseColor("#222222")), floatArrayOf(0.85f, 0.92f, 1.0f), Shader.TileMode.CLAMP)
+            canvas.drawCircle(cx, cy, radius, genericPaint)
+        }
+
         genericPaint.shader = null; genericPaint.strokeWidth = spokeThickness; genericPaint.color = Color.BLACK; genericPaint.alpha = GameSettings.STEER_WHEEL_ALPHA
         canvas.drawLine(cx - radius + thickness/2, cy, cx - hubRadius + 10f, cy, genericPaint)
         canvas.drawLine(cx + hubRadius - 10f, cy, cx + radius - thickness/2, cy, genericPaint)

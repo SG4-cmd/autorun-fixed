@@ -4,12 +4,13 @@ import com.example.autorun.config.GamePerformanceSettings
 import com.example.autorun.config.GameSettings
 import com.example.autorun.data.vehicle.VehicleDatabase
 import java.util.LinkedList
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.*
 import java.util.Random
 
 /**
  * 【GameState】
- * 現在地XYZ座標と、360度見渡せる自由なカメラオフセットを管理。
+ * 3DエンジンとUIの間で共有されるゲーム状態。
  */
 class GameState {
     
@@ -20,7 +21,7 @@ class GameState {
     var currentSpeedMs = 0f
     var calculatedSpeedKmH = 0f
 
-    var visualPitch = 0f // ピッチの描画用遅延変数
+    var visualPitch = 0f 
     var visualEngineRPM = 0f
     var visualSpeedKmH = 0f
 
@@ -31,8 +32,6 @@ class GameState {
     var rawThrottleInput = 0f 
     var throttle = 0f
     
-    var throttleTouchX = 0f
-    var throttleTouchY = 0f
     var isThrottleTouching = false
 
     // --- 3D世界座標 & 方位 ---
@@ -40,7 +39,9 @@ class GameState {
     var playerWorldZ = 0f
     var playerWorldY = 0f
     var playerWorldHeading = 0f 
-    var playerHeading: Float get() = playerWorldHeading; set(v) { playerWorldHeading = v }
+    var playerHeading: Float 
+        get() = playerWorldHeading
+        set(value) { playerWorldHeading = value }
     var playerHeadingDegrees = 0f 
 
     // --- カメラ操作系 (オフセット) ---
@@ -48,16 +49,17 @@ class GameState {
     var camYOffset = 0f
     var camZOffset = 0f
     var camYawOffset = 0f   
-    var camPitchOffset = 0f 
+    var camPitchOffset = 0.2f 
+    val activeCameraDirs = ConcurrentHashMap.newKeySet<Int>()
 
     var cameraPitch = 0f 
     var cameraRoll = 0f
-    var lateralVelocity = 0f // 互換用
+    var lateralVelocity = 0f 
 
     val opponentCars = mutableListOf<OpponentCar>()
 
     // --- システム・UI状態 ---
-    var navMode = NavMode.HOME 
+    var navMode = NavMode.HOME
     var isMapLongRange = false
     var isSettingsOpen = false
     var isLayoutMode = false 
@@ -75,24 +77,18 @@ class GameState {
     var lastFreqChangeTime = 0L
 
     var isDeveloperMode = false
-    var isPressingSpeedo = false
-    var isPressingRPMO = false
-    var gaugesLongPressStartTime = 0L
 
     var isManualTransmission = false
     var isChangingGear = false
     var gearChangeTimer = 0f
     var currentGear = 1
-    private var targetGear = 1
 
     var isStalled = true
     var engineRPM = 0f
     var currentTorqueNm = 0f
     var isTurboActive = false
     var turboBoost = -0.6f 
-    private var turbineInertia = 0f 
     
-    data class SkidMark(val distance: Float, val playerX: Float, val opacity: Float)
     val skidMarks = LinkedList<SkidMark>()
     var tireSlipRatio = 0f
 
@@ -101,14 +97,14 @@ class GameState {
     var visualTilt = 0f
     var carVisualRotation = 0f 
     var roadShake = 0f 
-    var carVerticalShake = 0f 
+    var carVerticalShake = 0f
     var gameTimeMillis = 0L
     private var startTimeNanos = System.nanoTime()
-    private val random = Random()
 
     fun resetCamera() {
         camXOffset = 0f; camYOffset = 0f; camZOffset = 0f
-        camYawOffset = 0f; camPitchOffset = 0f
+        camYawOffset = 0f; camPitchOffset = 0.2f
+        activeCameraDirs.clear()
     }
 
     fun update() {
@@ -145,7 +141,6 @@ class GameState {
         val roadH = CourseManager.getRoadWorldHeading(currentSegFloat)
         val speedAlongRoad = currentSpeedMs * cos((playerWorldHeading - roadH).toDouble()).toFloat()
         playerDistance += speedAlongRoad * dt
-        totalCurve += currentRoadCurve * (speedAlongRoad * dt / GameSettings.SEGMENT_LENGTH)
 
         val idealRoadX = CourseManager.getRoadWorldX(currentSegFloat)
         val idealRoadZ = CourseManager.getRoadWorldZ(currentSegFloat)
@@ -155,9 +150,10 @@ class GameState {
         currentSpeedMs = (currentSpeedMs + accel * dt).coerceAtLeast(0f)
         calculatedSpeedKmH = currentSpeedMs * 3.6f
 
-        // カメラ姿勢
         visualPitch += ((accel / 12f) - visualPitch) * 0.15f
         cameraPitch = (visualPitch * 0.5f) + CourseManager.getCurrentAngle(currentSegFloat) * 0.0174f
         playerHeadingDegrees = Math.toDegrees(playerWorldHeading.toDouble()).toFloat()
     }
+
+    data class SkidMark(val distance: Float, val playerX: Float, val opacity: Float)
 }
