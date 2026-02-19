@@ -93,7 +93,8 @@ object GesoEngine {
         val pixelsPerMeter = singleLaneScreenWidth / GameSettings.SINGLE_LANE_WIDTH
         ShadowRenderer.drawCarShadow(canvas, bitmap, carX, carY, carW, carH, sunRelHeading, specs.heightM, specs.lengthM, pixelsPerMeter)
         canvas.save()
-        canvas.rotate(state.visualTilt + state.roadShake, carX + carW / 2, carY + carH / 2)
+        // ハンドルを曲げた分だけ車体を回転させる (carVisualRotation) を追加
+        canvas.rotate(state.visualTilt + state.roadShake + state.carVisualRotation, carX + carW / 2, carY + carH / 2)
         playerDstRect.set(carX, carY, carX + carW, carY + carH)
         canvas.drawBitmap(bitmap, null, playerDstRect, mainPaint)
         if (state.isBraking) canvas.drawBitmap(bitmap, null, playerDstRect, brakePaint)

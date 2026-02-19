@@ -24,6 +24,7 @@ import com.example.autorun.config.GamePerformanceSettings
 import com.example.autorun.config.GameSettings
 import com.example.autorun.core.GameState
 import kotlin.math.abs
+import kotlin.math.atan2
 
 class GameView(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
 
@@ -53,6 +54,8 @@ class GameView(context: Context, attrs: AttributeSet? = null) : View(context, at
 
     private val debugTouchPointerIds = mutableSetOf<Int>()
     private val steerStartPosX = mutableMapOf<Int, Float>()
+    private val steerStartAngle = mutableMapOf<Int, Float>()
+    private val steerInitialInput = mutableMapOf<Int, Float>()
     private val throttleStartPosY = mutableMapOf<Int, Float>()
 
     private var draggingUiId: Int = -1 
@@ -115,7 +118,6 @@ class GameView(context: Context, attrs: AttributeSet? = null) : View(context, at
         windSound.start()
         brakeSound.start()
         tireSquealSound.start()
-        // musicPlayer.start() // 起動時の自動再生を停止
     }
 
     override fun onDetachedFromWindow() {
@@ -138,7 +140,6 @@ class GameView(context: Context, attrs: AttributeSet? = null) : View(context, at
             windSound.start()
             brakeSound.start()
             tireSquealSound.start()
-            // 起動時・復帰時の自動再生を行わない
         } else {
             engineSound.stop()
             exhaustSound.stop()
@@ -272,7 +273,6 @@ class GameView(context: Context, attrs: AttributeSet? = null) : View(context, at
                         val currentDist = getPinchDist(event); val deltaDist = currentDist - lastPinchDist
                         updateUiScale(draggingUiId, deltaDist / 800f); lastPinchDist = currentDist; HDU.updateLayoutRects(width.toFloat(), height.toFloat()); return true
                     } else if (draggingUiId >= 0) { 
-                        // 移動量を画面サイズで割って「比率」の変化として加算
                         offsetUiPos(draggingUiId, dx / width.toFloat(), dy / height.toFloat())
                         dragLastX = x; dragLastY = y; HDU.updateLayoutRects(width.toFloat(), height.toFloat()); return true 
                     }
@@ -289,15 +289,26 @@ class GameView(context: Context, attrs: AttributeSet? = null) : View(context, at
 
         when (action) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                if (GameGraphics.handleTouch(x, y, state, false, context, musicPlayer)) debugTouchPointerIds.add(pointerId)
-                else if (x < width * 0.45f) steerStartPosX[pointerId] = x
-                else if (x >= width * 0.45f && !brakeRect.contains(x, y)) throttleStartPosY[pointerId] = y
+                if (GameGraphics.handleTouch(x, y, state, false, context, musicPlayer)) {
+                    debugTouchPointerIds.add(pointerId)
+                } else if (HDU.steerRect.contains(x, y)) {
+                    val angle = Math.toDegrees(atan2((y - HDU.steerRect.centerY()).toDouble(), (x - HDU.steerRect.centerX()).toDouble())).toFloat()
+                    steerStartAngle[pointerId] = angle
+                    steerInitialInput[pointerId] = state.steeringInput
+                } else if (x < width * 0.45f) {
+                    steerStartPosX[pointerId] = x
+                } else if (x >= width * 0.45f && !brakeRect.contains(x, y)) {
+                    throttleStartPosY[pointerId] = y
+                }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 if (debugTouchPointerIds.contains(pointerId)) { GameGraphics.handleTouch(x, y, state, true, context, musicPlayer); debugTouchPointerIds.remove(pointerId) }
-                steerStartPosX.remove(pointerId); throttleStartPosY.remove(pointerId)
+                steerStartPosX.remove(pointerId)
+                steerStartAngle.remove(pointerId)
+                steerInitialInput.remove(pointerId)
+                throttleStartPosY.remove(pointerId)
             }
-            MotionEvent.ACTION_CANCEL -> { debugTouchPointerIds.clear(); steerStartPosX.clear(); throttleStartPosY.clear() }
+            MotionEvent.ACTION_CANCEL -> { debugTouchPointerIds.clear(); steerStartPosX.clear(); steerStartAngle.clear(); steerInitialInput.clear(); throttleStartPosY.clear() }
         }
 
         var sInput = 0f; var tInput = 0f; var br = false; var pSpeedo = false; var pRPM = false
@@ -309,8 +320,25 @@ class GameView(context: Context, attrs: AttributeSet? = null) : View(context, at
             val tx = event.getX(i); val ty = event.getY(i)
             if (HDU.rpmRect.contains(tx, ty)) pRPM = true
             if (HDU.speedRect.contains(tx, ty)) pSpeedo = true
-            if (steerStartPosX.containsKey(id)) { val deltaX = tx - steerStartPosX[id]!!; sInput = (deltaX / (width / 4f)).coerceIn(-1.0f, 1.0f); isSteeringActive = true }
-            if (throttleStartPosY.containsKey(id)) { val deltaY = throttleStartPosY[id]!! - ty; tInput = (deltaY / (height / 9f)).coerceIn(0f, 1.0f); isThrottleActive = true; throttleX = tx; throttleY = ty }
+            
+            if (steerStartAngle.containsKey(id)) {
+                val currentAngle = Math.toDegrees(atan2((ty - HDU.steerRect.centerY()).toDouble(), (tx - HDU.steerRect.centerX()).toDouble())).toFloat()
+                var deltaAngle = currentAngle - steerStartAngle[id]!!
+                if (deltaAngle > 180f) deltaAngle -= 360f
+                if (deltaAngle < -180f) deltaAngle += 360f
+                sInput = (steerInitialInput[id]!! + deltaAngle / GameSettings.STEER_MAX_ANGLE).coerceIn(-1.0f, 1.0f)
+                isSteeringActive = true
+            } else if (steerStartPosX.containsKey(id)) {
+                val deltaX = tx - steerStartPosX[id]!!
+                sInput = (deltaX / (width / 4f)).coerceIn(-1.0f, 1.0f)
+                isSteeringActive = true
+            }
+            
+            if (throttleStartPosY.containsKey(id)) {
+                val deltaY = throttleStartPosY[id]!! - ty
+                tInput = (deltaY / (height / 9f)).coerceIn(0f, 1.0f)
+                isThrottleActive = true; throttleX = tx; throttleY = ty
+            }
             if (brakeRect.contains(tx, ty)) br = true
         }
         state.rawSteeringInput = if (isSteeringActive) sInput else 0f; state.rawThrottleInput = if (isThrottleActive) tInput else 0f

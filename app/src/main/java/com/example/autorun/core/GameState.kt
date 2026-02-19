@@ -5,9 +5,7 @@ import com.example.autorun.config.GamePerformanceSettings
 import com.example.autorun.config.GameSettings
 import com.example.autorun.data.vehicle.VehicleDatabase
 import java.util.LinkedList
-import kotlin.math.abs
-import kotlin.math.pow
-import kotlin.math.sin
+import kotlin.math.*
 import java.util.Random
 
 /**
@@ -40,6 +38,12 @@ class GameState {
     var throttleTouchY = 0f
     var isThrottleTouching = false
 
+    // --- 3D世界座標 ---
+    var playerWorldX = 0f
+    var playerWorldZ = 0f
+    var playerWorldY = 0f
+    var playerWorldHeading = 0f // ラジアン
+
     // --- UI状態 ---
     var navMode = NavMode.HOME 
     var isMapLongRange = false
@@ -60,9 +64,8 @@ class GameState {
     val RADIO_MIN = 76.0f
     val RADIO_MAX = 95.0f
     
-    // ラジオ長押し管理
     var radioBtnDownStartTime = 0L
-    var radioBtnDir = 0 // -1: down, 1: up, 0: none
+    var radioBtnDir = 0
     var lastFreqChangeTime = 0L
 
     var isDeveloperMode = false
@@ -95,6 +98,7 @@ class GameState {
     var playerHeadingAngleMap = 0f 
     
     var visualTilt = 0f
+    var carVisualRotation = 0f
     var roadShake = 0f 
     var carVerticalShake = 0f 
     private var smoothedCentrifugal = 0f 
@@ -114,7 +118,6 @@ class GameState {
         val specs = VehicleDatabase.getSelectedVehicle()
         gameTimeMillis = (System.nanoTime() - startTimeNanos) / 1_000_000L
 
-        // --- ラジオ長押し選局ロジック ---
         if (radioBtnDir != 0) {
             val now = System.currentTimeMillis()
             if (radioBtnDownStartTime > 0 && now - radioBtnDownStartTime > 500) {
@@ -202,12 +205,13 @@ class GameState {
         val targetPitch = (accel / 10f) * 3.75f * weightFactor * brakeEffectFactor
         visualPitch += (targetPitch - visualPitch) * 0.15f
 
+        // ハンドル入力
         if (rawSteeringInput != 0f) {
-            val sign = if (rawSteeringInput < 0) -1f else 1f
-            steeringInput += (sign * abs(rawSteeringInput).pow(2.2f) - steeringInput) * 10.0f * dt
+            steeringInput = rawSteeringInput
         } else {
-            val recovery = steeringInput * 5.0f * dt
-            steeringInput = if (abs(steeringInput) < abs(recovery)) 0f else steeringInput - recovery
+            val recovery = 5.0f * dt
+            if (abs(steeringInput) < recovery) steeringInput = 0f
+            else steeringInput -= sign(steeringInput) * recovery
         }
         steeringInput = steeringInput.coerceIn(-1.0f, 1.0f)
 
@@ -216,18 +220,28 @@ class GameState {
         smoothedCentrifugal += (rawCentrifugal - smoothedCentrifugal) * GameSettings.CENTRIFUGAL_RESPONSE * dt
 
         if (calculatedSpeedKmH >= 1.0f) {
-            val speedFactor = (calculatedSpeedKmH / GameSettings.STEER_SPEED_SCALING).coerceIn(0.2f, 2.5f)
-            val steerForce = steeringInput * GameSettings.STEER_LATERAL_COEFF * speedFactor
-            val totalLateralForce = steerForce - smoothedCentrifugal
-            val lateralAccel = totalLateralForce / weightFactor
-            lateralVelocity += lateralAccel * dt
-            lateralVelocity *= (1.0f - 0.15f * dt * 60f).coerceIn(0f, 1f)
+            // ステアリングによる車体の向き（ビジュアル用）
+            val targetRotation = steeringInput * 15f 
+            carVisualRotation += (targetRotation - carVisualRotation) * 10.0f * dt
+            
+            // 物理的な横移動
+            val lateralVelocityFromSteer = currentSpeedMs * sin(Math.toRadians(carVisualRotation.toDouble())).toFloat()
+            val centrifugalEffect = -smoothedCentrifugal / weightFactor
+            
+            lateralVelocity = lateralVelocityFromSteer + centrifugalEffect
             playerX += lateralVelocity * dt
+            
+            // 道路の曲がりに合わせて自動的に playerX が変わる成分を補正
             val roadInertia = currentRoadCurve * currentSpeedMs * dt
             playerX -= roadInertia
-            applyTireSlipInertia(totalLateralForce, weightFactor, specs.tireGripMultiplier, dt)
+            
+            val speedFactor = (calculatedSpeedKmH / GameSettings.STEER_SPEED_SCALING).coerceIn(0.2f, 2.5f)
+            val steerForce = steeringInput * GameSettings.STEER_LATERAL_COEFF * speedFactor
+            applyTireSlipInertia(steerForce - smoothedCentrifugal, weightFactor, specs.tireGripMultiplier, dt)
         } else {
+            carVisualRotation *= (1.0f - 5.0f * dt).coerceIn(0f, 1f)
             tireSlipRatio = 0f
+            lateralVelocity = 0f
         }
 
         val brakeSkidEffect = if (isBraking && calculatedSpeedKmH > 20f) 0.4f else 0f
@@ -256,8 +270,21 @@ class GameState {
             if (currentSpeedMs > 1.0f) currentSpeedMs *= 0.985f
         }
 
-        playerHeading += currentRoadCurve * currentSpeedMs * dt
-        totalCurve += currentRoadCurve * (currentSpeedMs * dt / GameSettings.SEGMENT_LENGTH)
+        // --- 3D座標の更新 ---
+        val roadWorldH = CourseManager.getRoadWorldHeading(currentSegFloat)
+        playerWorldHeading = roadWorldH + Math.toRadians(carVisualRotation.toDouble()).toFloat()
+        
+        val baseWorldX = CourseManager.getRoadWorldX(currentSegFloat)
+        val baseWorldZ = CourseManager.getRoadWorldZ(currentSegFloat)
+        
+        // playerX は道路の中心からのオフセット。これを世界座標に変換
+        // 道路の向き(roadWorldH)に対して垂直な方向にオフセットをかける
+        val perpH = roadWorldH + PI.toFloat() / 2f
+        playerWorldX = baseWorldX + cos(perpH.toDouble()).toFloat() * playerX
+        playerWorldZ = baseWorldZ - sin(perpH.toDouble()).toFloat() * playerX
+        playerWorldY = CourseManager.getHeight(currentSegFloat)
+
+        playerHeading = playerWorldHeading
         playerHeadingDegrees = Math.toDegrees(playerHeading.toDouble()).toFloat()
 
         roadShake = if (isStalled) 0f else (sin(gameTimeMillis * 0.04f) * (0.04f + (currentTorqueNm / specs.maxTorqueNm * 0.08f))).toFloat()

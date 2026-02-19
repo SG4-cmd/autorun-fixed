@@ -6,6 +6,8 @@ import com.example.autorun.config.GameSettings
 import org.xmlpull.v1.XmlPullParser
 import kotlin.math.PI
 import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * 【CourseManager: コースデータの管理】
@@ -32,6 +34,10 @@ object CourseManager {
     private var roadObjects: List<RoadObject> = emptyList()
     private var lastSectionCache: PreparedSection? = null
     
+    private var worldX: FloatArray = FloatArray(0)
+    private var worldZ: FloatArray = FloatArray(0)
+    private var worldHeading: FloatArray = FloatArray(0)
+
     var courseName: String = "Unknown Course"
         private set
 
@@ -66,6 +72,34 @@ object CourseManager {
             }
         } catch (e: Exception) { e.printStackTrace() } finally { parser.close() }
         roadSections = sections; roadObjects = objects
+        
+        calculateWorldCoordinates()
+    }
+
+    private fun calculateWorldCoordinates() {
+        val totalSegs = getTotalSegments()
+        worldX = FloatArray(totalSegs + 1)
+        worldZ = FloatArray(totalSegs + 1)
+        worldHeading = FloatArray(totalSegs + 1)
+        
+        var curX = 0f
+        var curZ = 0f
+        var curH = 0f
+        val segLen = GameSettings.SEGMENT_LENGTH
+        
+        for (i in 0 until totalSegs) {
+            worldX[i] = curX
+            worldZ[i] = curZ
+            worldHeading[i] = curH
+            
+            val curve = getCurve(i.toFloat())
+            curH += curve * segLen
+            curX += sin(curH.toDouble()).toFloat() * segLen
+            curZ += cos(curH.toDouble()).toFloat() * segLen
+        }
+        worldX[totalSegs] = curX
+        worldZ[totalSegs] = curZ
+        worldHeading[totalSegs] = curH
     }
 
     fun getSection(index: Int): PreparedSection {
@@ -98,6 +132,27 @@ object CourseManager {
         val s = getSection(index.toInt()); val t = ((index - s.startIndex) / s.length).coerceIn(0f, 1f); val slopeFactor = 6 * t * (1 - t)
         val currentSlope = (s.endHeight - s.startHeight) / (s.length * GameSettings.SEGMENT_LENGTH) * slopeFactor
         return (atan2(currentSlope, 1f) * 180.0 / PI).toFloat()
+    }
+
+    fun getRoadWorldX(index: Float): Float {
+        val i = index.toInt().coerceIn(0, worldX.size - 1)
+        val nextI = (i + 1).coerceIn(0, worldX.size - 1)
+        val t = index - i
+        return worldX[i] + (worldX[nextI] - worldX[i]) * t
+    }
+
+    fun getRoadWorldZ(index: Float): Float {
+        val i = index.toInt().coerceIn(0, worldZ.size - 1)
+        val nextI = (i + 1).coerceIn(0, worldZ.size - 1)
+        val t = index - i
+        return worldZ[i] + (worldZ[nextI] - worldZ[i]) * t
+    }
+
+    fun getRoadWorldHeading(index: Float): Float {
+        val i = index.toInt().coerceIn(0, worldHeading.size - 1)
+        val nextI = (i + 1).coerceIn(0, worldHeading.size - 1)
+        val t = index - i
+        return worldHeading[i] + (worldHeading[nextI] - worldHeading[i]) * t
     }
 
     fun getRoadObjects(): List<RoadObject> = roadObjects
