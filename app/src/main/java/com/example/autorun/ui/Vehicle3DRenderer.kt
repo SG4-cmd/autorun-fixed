@@ -11,7 +11,7 @@ import java.nio.ShortBuffer
 
 /**
  * 【Vehicle3DRenderer】
- * モデルのスケールを適切に管理し、正しい位置に描画します。
+ * 3Dモデルの向きとスケールを正しく補正して描画します。
  */
 object Vehicle3DRenderer {
 
@@ -55,15 +55,20 @@ object Vehicle3DRenderer {
         
         Matrix.setIdentityM(modelMatrix, 0)
         
-        // 地面（y=0）にタイヤが接地するように配置
-        // glTFモデルの場合は、0.3fの浮かしを調整（モデルの作り込みに依存）
+        // 1. 位置を合わせる
         val yOffset = if (isGltfModel) 0.0f else 0.3f
         Matrix.translateM(modelMatrix, 0, state.playerWorldX, state.playerWorldY + yOffset, state.playerWorldZ)
         
+        // 2. 自車の向きに合わせて回転（Y軸）
         val rotationDeg = -Math.toDegrees(state.playerWorldHeading.toDouble()).toFloat()
         Matrix.rotateM(modelMatrix, 0, rotationDeg, 0f, 1f, 0f)
 
-        // glTFモデルは既にメートル単位で作られているため、二重にスケーリングしない
+        // 3. 【重要】縦向きを直すための補正回転（X軸を-90度回転させて水平にする）
+        if (isGltfModel) {
+            Matrix.rotateM(modelMatrix, 0, -90f, 1f, 0f, 0f)
+        }
+
+        // 4. スケール調整
         if (!isGltfModel) {
             Matrix.scaleM(modelMatrix, 0, specs.widthM, specs.heightM, specs.lengthM)
         }
