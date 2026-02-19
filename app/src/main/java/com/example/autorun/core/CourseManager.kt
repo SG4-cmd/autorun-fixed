@@ -11,10 +11,12 @@ import kotlin.math.sin
 
 /**
  * 【CourseManager: コースデータの管理】
+ * XMLからセクションタイプ（STRAIGHT/CURVE/UP等）を読み込み、レンダラーに提供します。
  */
 object CourseManager {
 
     data class PreparedSection(
+        val type: String,
         val length: Int, // segments
         val lanes: Int,
         val curve: Float,
@@ -55,13 +57,14 @@ object CourseManager {
                     when (parser.name) {
                         "course" -> courseName = parser.getAttributeValue(null, "name") ?: "Unknown Course"
                         "section" -> {
+                            val type = parser.getAttributeValue(null, "type") ?: "STRAIGHT"
                             val lengthM = parser.getAttributeValue(null, "length_m").toFloat()
                             val lanes = parser.getAttributeValue(null, "lanes").toInt()
                             val curve = parser.getAttributeValue(null, "curve").toFloat()
                             val slope = parser.getAttributeValue(null, "slope").toFloat()
                             val segments = (lengthM / GameSettings.SEGMENT_LENGTH).toInt()
                             val endH = currentH + (slope * lengthM)
-                            sections.add(PreparedSection(segments, lanes, curve, currentH, endH, currentIdx))
+                            sections.add(PreparedSection(type, segments, lanes, curve, currentH, endH, currentIdx))
                             currentH = endH
                             currentIdx += segments
                         }
@@ -82,24 +85,17 @@ object CourseManager {
         worldZ = FloatArray(totalSegs + 1)
         worldHeading = FloatArray(totalSegs + 1)
         
-        var curX = 0f
-        var curZ = 0f
-        var curH = 0f
+        var curX = 0f; var curZ = 0f; var curH = 0f
         val segLen = GameSettings.SEGMENT_LENGTH
         
         for (i in 0 until totalSegs) {
-            worldX[i] = curX
-            worldZ[i] = curZ
-            worldHeading[i] = curH
-            
+            worldX[i] = curX; worldZ[i] = curZ; worldHeading[i] = curH
             val curve = getCurve(i.toFloat())
             curH += curve * segLen
             curX += sin(curH.toDouble()).toFloat() * segLen
             curZ += cos(curH.toDouble()).toFloat() * segLen
         }
-        worldX[totalSegs] = curX
-        worldZ[totalSegs] = curZ
-        worldHeading[totalSegs] = curH
+        worldX[totalSegs] = curX; worldZ[totalSegs] = curZ; worldHeading[totalSegs] = curH
     }
 
     fun getSection(index: Int): PreparedSection {
@@ -112,12 +108,12 @@ object CourseManager {
             else if (index >= s.startIndex + s.length) low = mid + 1
             else { lastSectionCache = s; return s }
         }
-        return if (roadSections.isNotEmpty()) roadSections.last() else PreparedSection(100, 2, 0f, 0f, 0f, 0)
+        return if (roadSections.isNotEmpty()) roadSections.last() else PreparedSection("STRAIGHT", 100, 2, 0f, 0f, 0f, 0)
     }
 
+    fun getSectionType(index: Float): String = getSection(index.toInt()).type
     fun getTotalSegments(): Int = roadSections.lastOrNull()?.let { it.startIndex + it.length } ?: 0
     fun getTotalDistance(): Float = getTotalSegments() * GameSettings.SEGMENT_LENGTH
-
     fun getLanes(index: Float): Int = getSection(index.toInt()).lanes
     fun getCurve(index: Float): Float {
         val s = getSection(index.toInt()); val t = ((index - s.startIndex) / s.length).coerceIn(0f, 1f)
@@ -133,27 +129,17 @@ object CourseManager {
         val currentSlope = (s.endHeight - s.startHeight) / (s.length * GameSettings.SEGMENT_LENGTH) * slopeFactor
         return (atan2(currentSlope, 1f) * 180.0 / PI).toFloat()
     }
-
     fun getRoadWorldX(index: Float): Float {
-        val i = index.toInt().coerceIn(0, worldX.size - 1)
-        val nextI = (i + 1).coerceIn(0, worldX.size - 1)
-        val t = index - i
+        val i = index.toInt().coerceIn(0, worldX.size - 1); val nextI = (i + 1).coerceIn(0, worldX.size - 1); val t = index - i
         return worldX[i] + (worldX[nextI] - worldX[i]) * t
     }
-
     fun getRoadWorldZ(index: Float): Float {
-        val i = index.toInt().coerceIn(0, worldZ.size - 1)
-        val nextI = (i + 1).coerceIn(0, worldZ.size - 1)
-        val t = index - i
+        val i = index.toInt().coerceIn(0, worldZ.size - 1); val nextI = (i + 1).coerceIn(0, worldZ.size - 1); val t = index - i
         return worldZ[i] + (worldZ[nextI] - worldZ[i]) * t
     }
-
     fun getRoadWorldHeading(index: Float): Float {
-        val i = index.toInt().coerceIn(0, worldHeading.size - 1)
-        val nextI = (i + 1).coerceIn(0, worldHeading.size - 1)
-        val t = index - i
+        val i = index.toInt().coerceIn(0, worldHeading.size - 1); val nextI = (i + 1).coerceIn(0, worldHeading.size - 1); val t = index - i
         return worldHeading[i] + (worldHeading[nextI] - worldHeading[i]) * t
     }
-
     fun getRoadObjects(): List<RoadObject> = roadObjects
 }
