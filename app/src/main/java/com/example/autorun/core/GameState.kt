@@ -9,7 +9,7 @@ import java.util.Random
 
 /**
  * 【GameState】
- * 現在地をXYZ座標で管理し、タイヤの切れ角に応じた旋回物理を制御。
+ * 現在地XYZ座標と、360度見渡せる自由なカメラオフセットを管理。
  */
 class GameState {
     
@@ -20,8 +20,7 @@ class GameState {
     var currentSpeedMs = 0f
     var calculatedSpeedKmH = 0f
 
-    var lateralVelocity = 0f 
-    var visualPitch = 0f     
+    var visualPitch = 0f // ピッチの描画用遅延変数
     var visualEngineRPM = 0f
     var visualSpeedKmH = 0f
 
@@ -36,7 +35,7 @@ class GameState {
     var throttleTouchY = 0f
     var isThrottleTouching = false
 
-    // --- 3D世界座標 & カメラ姿勢 ---
+    // --- 3D世界座標 & 方位 ---
     var playerWorldX = 0f
     var playerWorldZ = 0f
     var playerWorldY = 0f
@@ -44,8 +43,16 @@ class GameState {
     var playerHeading: Float get() = playerWorldHeading; set(v) { playerWorldHeading = v }
     var playerHeadingDegrees = 0f 
 
-    var cameraPitch = 0f // 上下角
-    var cameraRoll = 0f  // ロール角
+    // --- カメラ操作系 (オフセット) ---
+    var camXOffset = 0f
+    var camYOffset = 0f
+    var camZOffset = 0f
+    var camYawOffset = 0f   
+    var camPitchOffset = 0f 
+
+    var cameraPitch = 0f 
+    var cameraRoll = 0f
+    var lateralVelocity = 0f // 互換用
 
     val opponentCars = mutableListOf<OpponentCar>()
 
@@ -99,12 +106,16 @@ class GameState {
     private var startTimeNanos = System.nanoTime()
     private val random = Random()
 
+    fun resetCamera() {
+        camXOffset = 0f; camYOffset = 0f; camZOffset = 0f
+        camYawOffset = 0f; camPitchOffset = 0f
+    }
+
     fun update() {
         val dt = GamePerformanceSettings.PHYSICS_DT
         val specs = VehicleDatabase.getSelectedVehicle()
         gameTimeMillis = (System.nanoTime() - startTimeNanos) / 1_000_000L
 
-        // エンジン始動判定
         if (!isManualTransmission && isStalled && rawThrottleInput > 0.01f) {
             isStalled = false; engineRPM = 800f 
         }
@@ -117,17 +128,13 @@ class GameState {
         engineRPM = rpmResult.first
         isStalled = rpmResult.second
 
-        // 3D旋回物理: ハンドルを切った分だけ方位角(Heading)を変化させる
+        // 3D旋回物理
         steeringInput = rawSteeringInput.coerceIn(-1.0f, 1.0f)
-        carVisualRotation = steeringInput * 5f 
-
         if (currentSpeedMs > 0.5f) {
-            // タイヤの切れ角による旋回率の計算
-            val turnRate = (steeringInput * 0.9f) * (currentSpeedMs / 15f).coerceIn(0.4f, 1.5f)
+            val turnRate = (steeringInput * 0.85f) * (currentSpeedMs / 18f).coerceIn(0.4f, 1.2f)
             playerWorldHeading += turnRate * dt
         }
 
-        // 世界座標(XYZ)の更新
         playerWorldX += sin(playerWorldHeading.toDouble()).toFloat() * currentSpeedMs * dt
         playerWorldZ += cos(playerWorldHeading.toDouble()).toFloat() * currentSpeedMs * dt
         
@@ -140,26 +147,17 @@ class GameState {
         playerDistance += speedAlongRoad * dt
         totalCurve += currentRoadCurve * (speedAlongRoad * dt / GameSettings.SEGMENT_LENGTH)
 
-        // 道路中心からの相対的なズレ(playerX)を計算
         val idealRoadX = CourseManager.getRoadWorldX(currentSegFloat)
         val idealRoadZ = CourseManager.getRoadWorldZ(currentSegFloat)
-        val dx = playerWorldX - idealRoadX
-        val dz = playerWorldZ - idealRoadZ
-        playerX = dx * cos(roadH.toDouble()).toFloat() - dz * sin(roadH.toDouble()).toFloat()
+        playerX = (playerWorldX - idealRoadX) * cos(roadH.toDouble()).toFloat() - (playerWorldZ - idealRoadZ) * sin(roadH.toDouble()).toFloat()
 
-        // カメラ姿勢の計算
         val accel = CarPhysics.calculateAcceleration(if (isChangingGear) 0f else currentTorqueNm, isBraking, currentSpeedMs, specs.weightKg, 0f, currentGear, playerX)
         currentSpeedMs = (currentSpeedMs + accel * dt).coerceAtLeast(0f)
         calculatedSpeedKmH = currentSpeedMs * 3.6f
 
+        // カメラ姿勢
         visualPitch += ((accel / 12f) - visualPitch) * 0.15f
         cameraPitch = (visualPitch * 0.5f) + CourseManager.getCurrentAngle(currentSegFloat) * 0.0174f
-        cameraRoll = steeringInput * -0.05f * (currentSpeedMs / 20f).coerceIn(0f, 1f)
-        visualTilt = cameraRoll * 57.3f 
-
-        visualEngineRPM += (engineRPM - visualEngineRPM) * 0.45f
-        visualSpeedKmH += (calculatedSpeedKmH - visualSpeedKmH) * 0.25f
         playerHeadingDegrees = Math.toDegrees(playerWorldHeading.toDouble()).toFloat()
-        roadShake = if (isStalled) 0f else (sin(gameTimeMillis * 0.04f) * (0.04f + (currentTorqueNm / specs.maxTorqueNm * 0.08f))).toFloat()
     }
 }

@@ -18,7 +18,7 @@ import kotlin.math.abs
 
 /**
  * 【HDU (Heads-Up Display)】
- * 統合UI管理クラス。各モジュールを呼び出して描画。
+ * 統合UI管理クラス。カメラ操作UIを追加。
  */
 object HDU {
     private val paint = Paint().apply { isAntiAlias = true }
@@ -38,6 +38,15 @@ object HDU {
     val steerRect = RectF()
     val throttleRect = RectF()
     val compassRect = RectF()
+
+    // カメラ操作用Rect
+    val camUpRect = RectF()
+    val camDownRect = RectF()
+    val camLeftRect = RectF()
+    val camRightRect = RectF()
+    val camForwardRect = RectF()
+    val camBackwardRect = RectF()
+    val camResetRect = RectF()
 
     fun init(context: Context) {
         try {
@@ -63,16 +72,30 @@ object HDU {
         HDUMeters.drawSteeringWheel(canvas, state, steerRect)
         HDUMeters.drawBrakePedal(canvas, state, brakeRect, fontWarrior)
         drawThrottleIndicator(canvas, state, throttleRect)
+        
+        drawCameraControls(canvas, state, fontWarrior)
 
         if (state.isDeveloperMode) {
             HDUDebugOverlay.draw(canvas, state, currentFps, engineSound)
         }
         
-        // ナビ以外の設定アイコン（settingsVisualRect）の描画を停止
-        // HDUSettings.drawSettingsButton(canvas, settingsVisualRect)
-
         if (state.isLayoutMode) HDULayoutEditor.draw(canvas, w, h, state, this)
         if (state.isSettingsOpen) HDUSettings.drawSettingsMenu(canvas, w, h, state, fontJapanese ?: fontWarrior)
+    }
+
+    private fun drawCameraControls(canvas: Canvas, state: GameState, font: Typeface?) {
+        paint.reset(); paint.isAntiAlias = true; paint.textAlign = Paint.Align.CENTER
+        paint.typeface = font; paint.textSize = 30f
+        
+        fun drawBtn(rect: RectF, label: String) {
+            paint.color = Color.BLACK; paint.alpha = 100; canvas.drawRoundRect(rect, 10f, 10f, paint)
+            paint.color = Color.WHITE; paint.alpha = 200; paint.style = Paint.Style.STROKE; paint.strokeWidth = 2f
+            canvas.drawRoundRect(rect, 10f, 10f, paint)
+            paint.style = Paint.Style.FILL; canvas.drawText(label, rect.centerX(), rect.centerY() + 12f, paint)
+        }
+
+        drawBtn(camUpRect, "▲"); drawBtn(camDownRect, "▼"); drawBtn(camLeftRect, "◀"); drawBtn(camRightRect, "▶")
+        drawBtn(camForwardRect, "IN"); drawBtn(camBackwardRect, "OUT"); drawBtn(camResetRect, "R")
     }
 
     fun updateLayoutRects(w: Float, h: Float) {
@@ -97,6 +120,17 @@ object HDU {
         val steerSize = 320f * sW
         steerRect.set(GameSettings.UI_POS_STEER.x * w - steerSize, GameSettings.UI_POS_STEER.y * h - steerSize, GameSettings.UI_POS_STEER.x * w + steerSize, GameSettings.UI_POS_STEER.y * h + steerSize)
         throttleRect.set(GameSettings.UI_POS_THROTTLE.x * w, GameSettings.UI_POS_THROTTLE.y * h, GameSettings.UI_POS_THROTTLE.x * w + 50f * sT, GameSettings.UI_POS_THROTTLE.y * h + 320f * sT)
+        
+        // カメラ操作UI配置 (画面中央右)
+        val cx = w * 0.85f; val cy = h * 0.6f; val b = 70f; val m = 10f
+        camUpRect.set(cx - b/2, cy - b*1.5f - m, cx + b/2, cy - b*0.5f - m)
+        camDownRect.set(cx - b/2, cy + b*0.5f + m, cx + b/2, cy + b*1.5f + m)
+        camLeftRect.set(cx - b*1.5f - m, cy - b/2, cx - b*0.5f - m, cy + b/2)
+        camRightRect.set(cx + b*0.5f + m, cy - b/2, cx + b*1.5f + m, cy + b/2)
+        camResetRect.set(cx - b/2, cy - b/2, cx + b/2, cy + b/2)
+        camForwardRect.set(cx + b*1.5f + m*2, cy - b - m, cx + b*2.5f + m*2, cy - m)
+        camBackwardRect.set(cx + b*1.5f + m*2, cy + m, cx + b*2.5f + m*2, cy + b + m)
+
         HDULayoutEditor.updateRects(GameSettings.UI_POS_EDITOR_PANEL.x, GameSettings.UI_POS_EDITOR_PANEL.y)
     }
 
