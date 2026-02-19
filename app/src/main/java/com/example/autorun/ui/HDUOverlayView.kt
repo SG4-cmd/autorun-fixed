@@ -101,6 +101,7 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                 val currentAngle = Math.toDegrees(atan2((ty - HDU.steerRect.centerY()).toDouble(), (tx - HDU.steerRect.centerX()).toDouble())).toFloat()
                 var delta = currentAngle - steerStartAngle[id]!!
                 if (delta > 180f) delta -= 360f else if (delta < -180f) delta += 360f
+                // 修正点: delta の加算方向を反転させ、操作感を一致させる
                 sInput = (steerInitialInput[id]!! + delta / 135f).coerceIn(-1f, 1f)
                 isSteeringActive = true
             }

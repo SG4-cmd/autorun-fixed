@@ -8,8 +8,6 @@ import com.example.autorun.data.vehicle.VehicleDatabase
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * 【Vehicle3DRenderer】
@@ -26,7 +24,6 @@ object Vehicle3DRenderer {
     private val mvpMatrix = FloatArray(16)
 
     init {
-        // 立方体の頂点データ (仮の車両モデル)
         val v = floatArrayOf(
             -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f,
             -0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,
@@ -35,7 +32,6 @@ object Vehicle3DRenderer {
             -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f,
             -0.5f,  0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f
         )
-        // インデックス描画を簡略化するため、全36頂点を直接入れる
         val indices = intArrayOf(
             0,1,2, 0,2,3, 4,5,6, 4,6,7, 8,9,10, 8,10,11, 
             12,13,14, 12,14,15, 16,17,18, 16,18,19, 20,21,22, 20,22,23
@@ -53,13 +49,13 @@ object Vehicle3DRenderer {
         val specs = VehicleDatabase.getSelectedVehicle()
         
         Matrix.setIdentityM(modelMatrix, 0)
-        // 車両のワールド座標への移動
         Matrix.translateM(modelMatrix, 0, state.playerWorldX, state.playerWorldY + 0.3f, state.playerWorldZ)
-        // 車両の回転 (Heading)
-        Matrix.rotateM(modelMatrix, 0, Math.toDegrees(state.playerWorldHeading.toDouble()).toFloat(), 0f, 1f, 0f)
-        // 車両のサイズのスケーリング
+        
+        // 修正点: OpenGLは反時計回りが正のため、物理エンジンのHeading(時計回り)にマイナスを掛けて同期
+        val rotationDeg = -Math.toDegrees(state.playerWorldHeading.toDouble()).toFloat()
+        Matrix.rotateM(modelMatrix, 0, rotationDeg, 0f, 1f, 0f)
+        
         Matrix.scaleM(modelMatrix, 0, specs.widthM, specs.heightM, specs.lengthM)
-
         Matrix.multiplyMM(mvpMatrix, 0, vPMatrix, 0, modelMatrix, 0)
 
         vertexBuffer.position(0); colorBuffer.position(0)
