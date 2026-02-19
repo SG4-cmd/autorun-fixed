@@ -7,9 +7,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * 【GltfLoader】
- * .glb (Binary glTF) 形式のモデルを解析します。
- * 柔軟なアトリビュート検索機能を備えた堅牢な実装です。
+ * 【GltfLoader: プロフェッショナル版】
+ * GLB内の全メッシュ・全プリミティブを統合して読み込みます。
  */
 object GltfLoader {
 
@@ -23,73 +22,76 @@ object GltfLoader {
 
             val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
 
-            // 1. Header 検証
-            val magic = buffer.int
-            if (magic != 0x46546C67) {
-                Log.e("GltfLoader", "Invalid Magic: ${Integer.toHexString(magic)}")
-                return null
-            }
-            val version = buffer.int
-            val totalLength = buffer.int
+            // Header (12 bytes)
+            if (buffer.int != 0x46546C67) throw Exception("GLBマジックナンバーが不正です")
+            buffer.int // version
+            buffer.int // totalLength
 
-            // 2. JSON Chunk 解析
-            val jsonChunkLength = buffer.int
-            val jsonChunkType = buffer.int
-            if (jsonChunkType != 0x4E4F534A) {
-                Log.e("GltfLoader", "JSON chunk not found")
-                return null
-            }
-            
-            val jsonBytes = ByteArray(jsonChunkLength)
+            // JSON Chunk
+            val jsonLength = buffer.int
+            if (buffer.int != 0x4E4F534A) throw Exception("JSONチャンクが見つかりません")
+            val jsonBytes = ByteArray(jsonLength)
             buffer.get(jsonBytes)
-            val jsonString = String(jsonBytes)
-            val json = JSONObject(jsonString)
+            val json = JSONObject(String(jsonBytes))
 
-            // 3. Binary Chunk 位置特定
-            val binChunkLength = buffer.int
-            val binChunkType = buffer.int
-            // glbによってはパディングがあるため、現在位置を保存
+            // BIN Chunk
+            buffer.int // binLength
+            if (buffer.int != 0x004E4942) throw Exception("BINチャンクが見つかりません")
             val binBuffer = buffer.slice().order(ByteOrder.LITTLE_ENDIAN)
 
-            // --- メッシュ解析 ---
+            val allVertices = mutableListOf<Float>()
+            val allIndices = mutableListOf<Short>()
+
             val meshes = json.getJSONArray("meshes")
-            val mesh = meshes.getJSONObject(0)
-            val primitives = mesh.getJSONArray("primitives")
-            val primitive = primitives.getJSONObject(0)
-            val attributes = primitive.getJSONObject("attributes")
+            
+            // 全てのメッシュとプリミティブを走査
+            for (m in 0 until meshes.length()) {
+                val primitives = meshes.getJSONObject(m).getJSONArray("primitives")
+                for (p in 0 until primitives.length()) {
+                    val primitive = primitives.getJSONObject(p)
+                    val attributes = primitive.getJSONObject("attributes")
+                    
+                    if (!attributes.has("POSITION")) continue
 
-            // POSITION 属性の検索 (必須)
-            if (!attributes.has("POSITION")) {
-                Log.e("GltfLoader", "No POSITION attribute found")
-                return null
-            }
-            val posAccessorIdx = attributes.getInt("POSITION")
-            val vertices = getFloatArray(json, binBuffer, posAccessorIdx)
+                    // 頂点データのオフセット
+                    val currentVertexOffset = (allVertices.size / 3).toShort()
+                    
+                    // POSITION 読み込み
+                    val posAccessorIdx = attributes.getInt("POSITION")
+                    val vData = getFloatArray(json, binBuffer, posAccessorIdx)
+                    allVertices.addAll(vData.toList())
 
-            // indices (インデックス) の検索 (推奨)
-            val indices = if (primitive.has("indices")) {
-                val indicesIdx = primitive.getInt("indices")
-                getShortArray(json, binBuffer, indicesIdx)
-            } else {
-                // インデックスがない場合は、0,1,2...と連番を生成
-                ShortArray(vertices.size / 3) { it.toShort() }
-            }
-
-            // カラーデータの生成 (モデルを赤色で表示)
-            val colors = FloatArray((vertices.size / 3) * 4) { i ->
-                when (i % 4) {
-                    0 -> 1.0f // R
-                    1 -> 0.2f // G
-                    2 -> 0.2f // B
-                    else -> 1.0f // A
+                    // INDICES 読み込み
+                    if (primitive.has("indices")) {
+                        val indicesIdx = primitive.getInt("indices")
+                        val iData = getShortArray(json, binBuffer, indicesIdx)
+                        // インデックスにオフセットを加えて追加
+                        for (idx in iData) {
+                            allIndices.add((idx + currentVertexOffset).toShort())
+                        }
+                    } else {
+                        // インデックスがない場合は連番生成
+                        for (i in 0 until vData.size / 3) {
+                            allIndices.add((i + currentVertexOffset).toShort())
+                        }
+                    }
                 }
             }
 
-            Log.i("GltfLoader", "Successfully loaded $fileName: ${vertices.size/3} vertices")
-            ModelData(vertices, indices, colors)
+            if (allVertices.isEmpty()) throw Exception("頂点データが空です")
+
+            // カラー生成（全パーツ一律の色）
+            val finalColors = FloatArray((allVertices.size / 3) * 4) { i ->
+                when (i % 4) {
+                    0 -> 0.6f; 1 -> 0.6f; 2 -> 0.7f; else -> 1.0f 
+                }
+            }
+
+            Log.i("GltfLoader", "成功: $fileName (${allVertices.size / 3} 頂点, ${allIndices.size / 3} ポリゴン)")
+            ModelData(allVertices.toFloatArray(), allIndices.toShortArray(), finalColors)
+
         } catch (e: Exception) {
-            Log.e("GltfLoader", "Error parsing GLB: ${e.message}")
-            e.printStackTrace()
+            Log.e("GltfLoader", "読み込みエラー ($fileName): ${e.message}")
             null
         }
     }
@@ -100,16 +102,10 @@ object GltfLoader {
         val count = accessor.getInt("count")
         val bufferView = json.getJSONArray("bufferViews").getJSONObject(bufferViewIdx)
         
-        val byteOffset = bufferView.optInt("byteOffset", 0)
-        val accessorByteOffset = accessor.optInt("byteOffset", 0)
+        val offset = bufferView.optInt("byteOffset", 0) + accessor.optInt("byteOffset", 0)
+        binBuffer.position(offset)
         
-        binBuffer.position(byteOffset + accessorByteOffset)
-        
-        val result = FloatArray(count * 3)
-        for (i in 0 until count * 3) {
-            result[i] = binBuffer.float
-        }
-        return result
+        return FloatArray(count * 3) { binBuffer.float }
     }
 
     private fun getShortArray(json: JSONObject, binBuffer: ByteBuffer, accessorIdx: Int): ShortArray {
@@ -117,21 +113,15 @@ object GltfLoader {
         val bufferViewIdx = accessor.getInt("bufferView")
         val count = accessor.getInt("count")
         val bufferView = json.getJSONArray("bufferViews").getJSONObject(bufferViewIdx)
+        val componentType = accessor.getInt("componentType")
         
-        val byteOffset = bufferView.optInt("byteOffset", 0)
-        val accessorByteOffset = accessor.optInt("byteOffset", 0)
-        val componentType = accessor.getInt("componentType") // 5123 = Unsigned Short
+        val offset = bufferView.optInt("byteOffset", 0) + accessor.optInt("byteOffset", 0)
+        binBuffer.position(offset)
         
-        binBuffer.position(byteOffset + accessorByteOffset)
-        
-        val result = ShortArray(count)
-        if (componentType == 5123) { // UNSIGNED_SHORT
-            for (i in 0 until count) result[i] = binBuffer.short
-        } else if (componentType == 5125) { // UNSIGNED_INT (2.0で一般的)
-            for (i in 0 until count) {
-                result[i] = (binBuffer.int and 0xFFFF).toShort()
-            }
+        return ShortArray(count) {
+            if (componentType == 5123) binBuffer.short 
+            else if (componentType == 5125) (binBuffer.int and 0xFFFF).toShort()
+            else 0
         }
-        return result
     }
 }
