@@ -1,6 +1,5 @@
 package com.example.autorun.ui
 
-import android.graphics.Color
 import android.opengl.GLES20
 import android.opengl.Matrix
 import com.example.autorun.core.GameState
@@ -8,62 +7,71 @@ import com.example.autorun.data.vehicle.VehicleDatabase
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.nio.ShortBuffer
 
 /**
  * 【Vehicle3DRenderer】
- * 3D空間内にプレイヤー車両を描画します。
+ * glTF形式などの高度な3Dモデルを、プロ仕様のインデックス描画で実行します。
  */
 object Vehicle3DRenderer {
 
-    private val vertexBuffer: FloatBuffer = ByteBuffer.allocateDirect(36 * 3 * 4)
-        .order(ByteOrder.nativeOrder()).asFloatBuffer()
-    private val colorBuffer: FloatBuffer = ByteBuffer.allocateDirect(36 * 4 * 4)
-        .order(ByteOrder.nativeOrder()).asFloatBuffer()
+    private var vertexBuffer: FloatBuffer? = null
+    private var colorBuffer: FloatBuffer? = null
+    private var indexBuffer: ShortBuffer? = null
+    private var indexCount: Int = 0
 
     private val modelMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
 
-    init {
-        val v = floatArrayOf(
-            -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f,
-            -0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,
-            -0.5f, -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f,  0.5f, -0.5f, -0.5f,  0.5f,
-             0.5f, -0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f,  0.5f, -0.5f,  0.5f,
-            -0.5f, -0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f, -0.5f,  0.5f, -0.5f, -0.5f,  0.5f,
-            -0.5f,  0.5f, -0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f,  0.5f, -0.5f,  0.5f,  0.5f
-        )
-        val indices = intArrayOf(
-            0,1,2, 0,2,3, 4,5,6, 4,6,7, 8,9,10, 8,10,11, 
-            12,13,14, 12,14,15, 16,17,18, 16,18,19, 20,21,22, 20,22,23
-        )
-        for (idx in indices) {
-            vertexBuffer.put(v[idx * 3]); vertexBuffer.put(v[idx * 3 + 1]); vertexBuffer.put(v[idx * 3 + 2])
-        }
+    /**
+     * プロ仕様のインデックス描画データをセットします。
+     */
+    fun setModelData(vertices: FloatArray, colors: FloatArray, indices: ShortArray) {
+        indexCount = indices.size
         
-        val c = Color.RED
-        val r = Color.red(c) / 255f; val g = Color.green(c) / 255f; val b = Color.blue(c) / 255f; val a = Color.alpha(c) / 255f
-        repeat(36) { colorBuffer.put(r); colorBuffer.put(g); colorBuffer.put(b); colorBuffer.put(a) }
+        vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4)
+            .order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+                put(vertices)
+                position(0)
+            }
+            
+        colorBuffer = ByteBuffer.allocateDirect(colors.size * 4)
+            .order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+                put(colors)
+                position(0)
+            }
+
+        indexBuffer = ByteBuffer.allocateDirect(indices.size * 2)
+            .order(ByteOrder.nativeOrder()).asShortBuffer().apply {
+                put(indices)
+                position(0)
+            }
     }
 
     fun draw(vPMatrix: FloatArray, state: GameState) {
+        val vBuf = vertexBuffer ?: return
+        val cBuf = colorBuffer ?: return
+        val iBuf = indexBuffer ?: return
         val specs = VehicleDatabase.getSelectedVehicle()
         
         Matrix.setIdentityM(modelMatrix, 0)
         Matrix.translateM(modelMatrix, 0, state.playerWorldX, state.playerWorldY + 0.3f, state.playerWorldZ)
         
-        // 修正点: OpenGLは反時計回りが正のため、物理エンジンのHeading(時計回り)にマイナスを掛けて同期
         val rotationDeg = -Math.toDegrees(state.playerWorldHeading.toDouble()).toFloat()
         Matrix.rotateM(modelMatrix, 0, rotationDeg, 0f, 1f, 0f)
-        
         Matrix.scaleM(modelMatrix, 0, specs.widthM, specs.heightM, specs.lengthM)
+        
         Matrix.multiplyMM(mvpMatrix, 0, vPMatrix, 0, modelMatrix, 0)
 
-        vertexBuffer.position(0); colorBuffer.position(0)
-        GLES20.glVertexAttribPointer(GesoEngine3D.positionHandle, 3, GLES20.GL_FLOAT, false, 0, vertexBuffer)
+        GLES20.glVertexAttribPointer(GesoEngine3D.positionHandle, 3, GLES20.GL_FLOAT, false, 0, vBuf)
         GLES20.glEnableVertexAttribArray(GesoEngine3D.positionHandle)
-        GLES20.glVertexAttribPointer(GesoEngine3D.colorHandle, 4, GLES20.GL_FLOAT, false, 0, colorBuffer)
+        
+        GLES20.glVertexAttribPointer(GesoEngine3D.colorHandle, 4, GLES20.GL_FLOAT, false, 0, cBuf)
         GLES20.glEnableVertexAttribArray(GesoEngine3D.colorHandle)
+        
         GLES20.glUniformMatrix4fv(GesoEngine3D.mvpMatrixHandle, 1, false, mvpMatrix, 0)
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 36)
+        
+        // インデックス描画（要素描画）を実行。これが最も効率的な描画方法です。
+        GLES20.glDrawElements(GLES20.GL_TRIANGLES, indexCount, GLES20.GL_UNSIGNED_SHORT, iBuf)
     }
 }

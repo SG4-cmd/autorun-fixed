@@ -12,7 +12,6 @@ import javax.microedition.khronos.opengles.GL10
 
 /**
  * 【GameView: 3D描画層】
- * 物理演算とOpenGL描画を担当します。タッチイベントはオーバーレイ層(HDUOverlayView)で処理されます。
  */
 class GameView(context: Context, attrs: AttributeSet? = null) : GLSurfaceView(context, attrs), GLSurfaceView.Renderer {
 
@@ -37,7 +36,8 @@ class GameView(context: Context, attrs: AttributeSet? = null) : GLSurfaceView(co
     fun getGameState(): GameState = state
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-        GesoEngine3D.init()
+        // Contextを渡してモデル読み込みを可能にする
+        GesoEngine3D.init(context)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -57,7 +57,7 @@ class GameView(context: Context, attrs: AttributeSet? = null) : GLSurfaceView(co
         
         accumulator += elapsedSeconds.coerceAtMost(0.25f)
         while (accumulator >= fixedDt) {
-            updateCameraByGameState() // GameStateの状態に基づいてカメラを動かす
+            updateCameraByGameState()
             state.update()
             accumulator -= fixedDt
         }
@@ -84,6 +84,5 @@ class GameView(context: Context, attrs: AttributeSet? = null) : GLSurfaceView(co
         tireSquealSound.update(state.tireSlipRatio, state.calculatedSpeedKmH, state.isBraking)
     }
 
-    // タッチイベントは HDUOverlayView が処理するため、ここでは false を返して透過させる
     override fun onTouchEvent(event: MotionEvent): Boolean = false
 }
