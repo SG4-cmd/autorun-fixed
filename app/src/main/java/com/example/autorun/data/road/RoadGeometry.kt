@@ -8,7 +8,7 @@ import kotlin.math.*
 
 /**
  * 【RoadGeometry】
- * 3D投影エンジン。自車の後方も含め、自由なカメラ位置・角度から投影を行う。
+ * 3D投影エンジン。計算負荷を最小限に抑えた高速投影。
  */
 object RoadGeometry {
     const val MAX_SAMPLES = 4000
@@ -36,11 +36,11 @@ object RoadGeometry {
         val roadW = GameSettings.ROAD_WIDTH
         val fov = GameSettings.FOV
         val stretch = GameSettings.ROAD_STRETCH
+        val wHalf = w * 0.5f
         
         val resStepFactor = GameSettings.getResolutionStepFactor()
         val maxSamples = (GamePerformanceSettings.ROAD_QUALITY / resStepFactor).toInt().coerceIn(200, MAX_SAMPLES)
         
-        // カメラの絶対位置 (自車位置 + オフセット)
         val cosH = cos(state.playerWorldHeading.toDouble()).toFloat()
         val sinH = sin(state.playerWorldHeading.toDouble()).toFloat()
         
@@ -48,7 +48,6 @@ object RoadGeometry {
         val camWorldZ = state.playerWorldZ + (-state.camXOffset * sinH + state.camZOffset * cosH)
         val camWorldY = state.playerWorldY + GameSettings.CAMERA_HEIGHT + state.camYOffset
         
-        // カメラの絶対方位 (車体方位 + オフセット)
         val camAbsH = state.playerWorldHeading + state.camYawOffset
         val camAbsP = state.cameraPitch + state.camPitchOffset
         
@@ -58,9 +57,13 @@ object RoadGeometry {
         val sinCamP = sin(camAbsP.toDouble()).toFloat()
 
         var sampleCount = 0
-        var currentRelDist = -50f // カメラ自由移動のため、より後ろから描画
+        var currentRelDist = -50f
 
         val oppOffsetM = roadW + (GameSettings.SHOULDER_WIDTH_RIGHT * 2f) + GameSettings.MEDIAN_WIDTH
+        val halfW = roadW * 0.5f
+        val lineW = GameSettings.LANE_MARKER_WIDTH
+        val sL = GameSettings.SHOULDER_WIDTH_LEFT
+        val sR = GameSettings.SHOULDER_WIDTH_RIGHT
 
         while (currentRelDist < GameSettings.DRAW_DISTANCE && sampleCount < maxSamples) {
             val dz = when {
@@ -80,56 +83,53 @@ object RoadGeometry {
             val rWorldY = CourseManager.getHeight(segmentIdx)
             val rH = CourseManager.getRoadWorldHeading(segmentIdx)
 
-            fun projectPoint(wx: Float, wz: Float, wy: Float): Pair<Float, Float>? {
-                val dx = wx - camWorldX
-                val dz_ = wz - camWorldZ
-                val dy = wy - camWorldY
-                
-                // 方位回転
-                val rx = dx * cosCamH - dz_ * sinCamH
-                val rzTmp = dx * sinCamH + dz_ * cosCamH
-                
-                // ピッチ回転
-                val ryFinal = dy * cosCamP - rzTmp * sinCamP
-                val rzFinal = dy * sinCamP + rzTmp * cosCamP
-                
-                if (rzFinal <= 1.0f) return null
-                
-                val scale = fov / rzFinal
-                return Pair((w * 0.5f) + rx * scale * stretch, horizon - ryFinal * scale)
-            }
-
-            val centerProj = projectPoint(rWorldX, rWorldZ, rWorldY)
-            if (centerProj == null) {
+            // 基準点の差分
+            val dx0 = rWorldX - camWorldX
+            val dz0 = rWorldZ - camWorldZ
+            val dy0 = rWorldY - camWorldY
+            
+            // 基準点のカメラ回転
+            val rx0 = dx0 * cosCamH - dz0 * sinCamH
+            val rzTmp0 = dx0 * sinCamH + dz0 * cosCamH
+            val ry0 = dy0 * cosCamP - rzTmp0 * sinCamP
+            val rz0 = dy0 * sinCamP + rzTmp0 * cosCamP
+            
+            if (rz0 <= 1.0f) {
                 currentRelDist += dz
                 continue
             }
-            
-            centerX[sampleCount] = centerProj.first
-            yCoords[sampleCount] = centerProj.second
-            zCoords[sampleCount] = currentRelDist
 
+            // 道路方向ベクトル(perp)の投影係数
             val perpX = cos(rH.toDouble()).toFloat()
             val perpZ = -sin(rH.toDouble()).toFloat()
-            val halfW = roadW * 0.5f
-            val lineW = GameSettings.LANE_MARKER_WIDTH
-            val sL = GameSettings.SHOULDER_WIDTH_LEFT
-            val sR = GameSettings.SHOULDER_WIDTH_RIGHT
+            
+            // perpベクトルのカメラ回転成分
+            val prx = perpX * cosCamH - perpZ * sinCamH
+            val przTmp = perpX * sinCamH + perpZ * cosCamH
+            val pry = -przTmp * sinCamP
+            val prz = przTmp * cosCamP
 
-            fun getX(offsetX: Float): Float {
-                return projectPoint(rWorldX + perpX * offsetX, rWorldZ + perpZ * offsetX, rWorldY)?.first ?: centerX[sampleCount]
+            fun getXFast(offsetX: Float): Float {
+                val rz = rz0 + prz * offsetX
+                if (rz <= 0.1f) return wHalf
+                val scale = fov / rz
+                return wHalf + (rx0 + prx * offsetX) * scale * stretch
             }
 
-            leftInnerX[sampleCount] = getX(-halfW)
-            rightInnerX[sampleCount] = getX(halfW)
-            leftOuterX[sampleCount] = getX(-halfW - lineW)
-            rightOuterX[sampleCount] = getX(halfW + lineW)
-            leftShoulderX[sampleCount] = getX(-halfW - lineW - sL)
-            rightShoulderX[sampleCount] = getX(halfW + lineW + sR)
+            centerX[sampleCount] = wHalf + rx0 * (fov / rz0) * stretch
+            yCoords[sampleCount] = horizon - ry0 * (fov / rz0)
+            zCoords[sampleCount] = currentRelDist
 
-            oppCenterX[sampleCount] = getX(oppOffsetM)
-            oppLeftShoulderX[sampleCount] = getX(oppOffsetM - halfW - lineW - sR)
-            oppRightShoulderX[sampleCount] = getX(oppOffsetM + halfW + lineW + sL)
+            leftInnerX[sampleCount] = getXFast(-halfW)
+            rightInnerX[sampleCount] = getXFast(halfW)
+            leftOuterX[sampleCount] = getXFast(-halfW - lineW)
+            rightOuterX[sampleCount] = getXFast(halfW + lineW)
+            leftShoulderX[sampleCount] = getXFast(-halfW - lineW - sL)
+            rightShoulderX[sampleCount] = getXFast(halfW + lineW + sR)
+
+            oppCenterX[sampleCount] = getXFast(oppOffsetM)
+            oppLeftShoulderX[sampleCount] = getXFast(oppOffsetM - halfW - lineW - sR)
+            oppRightShoulderX[sampleCount] = getXFast(oppOffsetM + halfW + lineW + sL)
 
             sampleCount++
             currentRelDist += dz

@@ -38,13 +38,23 @@ object GameGraphics {
         const val WHEEL_X_OFFSET_RATIO = 0.15f
         const val WHEEL_X_OFFSET_RATIO_COMPLEMENT = 0.85f 
         const val CAR_SIZE_SCREEN_RATIO = 0.1936f
-        // パフォーマンス向上のため、描画レイヤー数を削減 (25 -> 10)
-        const val CAR_3D_LAYERS = 1
+        // 描画レイヤー数を最適化 (25 -> 10)
+        const val CAR_3D_LAYERS = 10
     }
 
     private val mainPaint = Paint().apply { isAntiAlias = true; isFilterBitmap = true }
     private val wheelPaint = Paint().apply { isAntiAlias = true; color = COLOR_WHEEL }
     private val brakePaint = Paint().apply { isAntiAlias = true; colorFilter = PorterDuffColorFilter(COLOR_BRAKE_OVERLAY.toInt(), PorterDuff.Mode.SRC_ATOP) }
+
+    // レイヤーごとのカラーフィルタをキャッシュしてGCを抑制
+    private val layerFilters: Array<PorterDuffColorFilter?> = Array(DrawingConstants.CAR_3D_LAYERS + 1) { i ->
+        if (i == 0) null
+        else {
+            val darken = 0.7f + 0.3f * (1.0f - i.toFloat() / DrawingConstants.CAR_3D_LAYERS)
+            val c = (darken * 255).toInt().coerceIn(0, 255)
+            PorterDuffColorFilter(Color.rgb(c, c, c), PorterDuff.Mode.MULTIPLY)
+        }
+    }
 
     private val developerModeTouchArea = RectF(20f, 150f, 20f + GameUIParameters.STATUS_BOX_WIDTH, 150f + GameUIParameters.STATUS_BOX_HEIGHT)
     private val guardrailToggleArea = RectF()
@@ -66,6 +76,7 @@ object GameGraphics {
             playerBitmap = BitmapFactory.decodeResource(context.resources, specs.imageResId)
             lastLoadedResId = specs.imageResId
         }
+        // BackgroundRendererのリソースロードも必要最小限に抑えるべきだが、ここでは現状維持
         BackgroundRenderer.loadResources(context)
     }
 
@@ -132,7 +143,7 @@ object GameGraphics {
         val wheelH = carH * DrawingConstants.WHEEL_HEIGHT_TO_CAR_HEIGHT_RATIO
         val wheelY = carBaseY + carH * DrawingConstants.WHEEL_Y_OFFSET_TO_CAR_HEIGHT_RATIO + GameSettings.WHEEL_HEIGHT_OFFSET
         val treadOffset = GameSettings.WHEEL_X_OFFSET
-        val tireTurnAngle = state.steeringInput * 25f // 視覚的なタイヤの切れ角
+        val tireTurnAngle = state.steeringInput * 25f 
 
         // 左前輪
         canvas.save()
@@ -148,7 +159,7 @@ object GameGraphics {
         canvas.drawRoundRect(wheelRX, wheelY, wheelRX + wheelW, wheelY + wheelH, 4f, 4f, wheelPaint)
         canvas.restore()
         
-        // 車体描画 (擬似3D厚み)
+        // 車体描画 (擬似3D厚み) - 最適化済み
         original?.let { src ->
             val numLayers = DrawingConstants.CAR_3D_LAYERS
             val z0 = GameSettings.FOV / pixelsPerMeter
@@ -164,13 +175,10 @@ object GameGraphics {
                 val layerBodyY = layerBottomY - layerH + (state.carVerticalShake + state.visualPitch) * ratio
                 
                 playerDstRect.set(layerX, layerBodyY, layerX + layerW, layerBodyY + layerH)
-                if (i > 0) {
-                    val darken = 0.7f + 0.3f * (1.0f - i.toFloat() / numLayers)
-                    val c = (darken * 255).toInt().coerceIn(0, 255)
-                    mainPaint.colorFilter = PorterDuffColorFilter(Color.rgb(c, c, c), PorterDuff.Mode.MULTIPLY)
-                } else {
-                    mainPaint.colorFilter = null
-                }
+                
+                // カラーフィルタの新規生成を避け、キャッシュから取得
+                mainPaint.colorFilter = layerFilters[i]
+
                 canvas.drawBitmap(src, null, playerDstRect, mainPaint)
             }
             mainPaint.colorFilter = null

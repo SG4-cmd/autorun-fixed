@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import com.example.autorun.R
@@ -16,71 +15,50 @@ import kotlin.math.*
 
 /**
  * 【RoadRenderer】
- * 道路のビジュアルを描画し、同時に付帯オブジェクトの座標をRendererに送る。
+ * 高速ポリゴン描画(drawVertices)を採用した最速レンダラー。
  */
 object RoadRenderer {
-    private val asphaltPaint = Paint().apply {
-        color = GameSettings.COLOR_ROAD_DARK
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-    private val whitePaint = Paint().apply {
-        color = Color.WHITE
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-    private val concretePaint = Paint().apply {
-        color = Color.parseColor("#999999")
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
-    private val skidMarkPaint = Paint().apply {
-        color = GameSettings.COLOR_SKIDMARK
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        isAntiAlias = true
-    }
-    
-    // ヘッドライト用のPaint
-    private val headlightPaint = Paint().apply {
-        style = Paint.Style.FILL
-        isAntiAlias = true
-    }
+    private val asphaltPaint = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val whitePaint = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val concretePaint = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val skidMarkPaint = Paint().apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; isAntiAlias = true }
+    private val headlightPaint = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
 
-    private val roadPath = Path().apply { fillType = Path.FillType.WINDING }
-    private val medianConcretePath = Path().apply { fillType = Path.FillType.WINDING }
-    private val rumblePath = Path().apply { fillType = Path.FillType.WINDING }
-    private val lanePath = Path().apply { fillType = Path.FillType.WINDING }
+    private const val MAX_VERTICES = RoadGeometry.MAX_SAMPLES * 6 * 2
+    private val roadVertices = FloatArray(MAX_VERTICES)
+    private val medianVertices = FloatArray(MAX_VERTICES)
+    private val rumbleVertices = FloatArray(MAX_VERTICES)
+    private val laneVertices = FloatArray(MAX_VERTICES)
+
+    private var colorConcreteDefault = Color.parseColor("#999999")
+    private var lastDayFactor = -1f
 
     fun init(context: Context) {
-        val colorConcrete = context.getString(R.string.color_concrete)
-        concretePaint.color = Color.parseColor(colorConcrete)
+        val colorConcreteStr = context.getString(R.string.color_concrete)
+        colorConcreteDefault = Color.parseColor(colorConcreteStr)
         asphaltPaint.color = GameSettings.COLOR_ROAD_DARK
         whitePaint.color = GameSettings.COLOR_LANE
         skidMarkPaint.color = GameSettings.COLOR_SKIDMARK
+        concretePaint.color = colorConcreteDefault
     }
 
     fun draw(canvas: Canvas, w: Float, h: Float, state: GameState, horizon: Float) {
-        // 時刻による明るさの計算
         val calendar = Calendar.getInstance()
         val secondsOfDay = calendar.get(Calendar.HOUR_OF_DAY) * 3600 +
                            calendar.get(Calendar.MINUTE) * 60 +
                            calendar.get(Calendar.SECOND)
-        val sunAngle = (secondsOfDay.toDouble() / 84600.0 * 2.0 * PI - PI).toFloat()
+        val sunAngle = (secondsOfDay.toDouble() / 86400.0 * 2.0 * PI - PI / 2.0).toFloat()
         val dayFactor = (sin(sunAngle).coerceIn(-1f, 1f) + 1f) / 2f
         
-        // 道路の色を時刻に合わせて暗くする
-        updatePaintsBrightness(dayFactor)
+        if (abs(dayFactor - lastDayFactor) > 0.005f) {
+            updatePaintsBrightness(dayFactor)
+            lastDayFactor = dayFactor
+        }
 
         val sampleCount = RoadGeometry.compute(w, h, state, horizon)
         if (sampleCount < 2) return
 
-        roadPath.reset()
-        medianConcretePath.reset()
-        rumblePath.reset()
-        lanePath.reset()
         RoadObjectRenderer.reset()
-
         val playerDist = state.playerDistance
         val fov = GameSettings.FOV
         val stretch = GameSettings.ROAD_STRETCH
@@ -89,75 +67,62 @@ object RoadRenderer {
         val totalPattern = dashLen + GameSettings.LANE_GAP_LENGTH.toFloat()
         val sunRelHeading = GameSettings.SUN_WORLD_HEADING - state.playerHeading
 
-        val yCoords = RoadGeometry.yCoords
-        val zCoords = RoadGeometry.zCoords
-        val leftShoulderX = RoadGeometry.leftShoulderX
-        val rightShoulderX = RoadGeometry.rightShoulderX
-        val leftOuterX = RoadGeometry.leftOuterX
-        val leftInnerX = RoadGeometry.leftInnerX
-        val rightInnerX = RoadGeometry.rightInnerX
-        val rightOuterX = RoadGeometry.rightOuterX
-        val centerX = RoadGeometry.centerX
-        val oppLeftShoulderX = RoadGeometry.oppLeftShoulderX
-        val oppRightShoulderX = RoadGeometry.oppRightShoulderX
-        val oppCenterX = RoadGeometry.oppCenterX
+        var rvIdx = 0; var mvIdx = 0; var ruvIdx = 0; var lvIdx = 0
 
         for (i in 1 until sampleCount) {
-            val y = yCoords[i]; val yPrev = yCoords[i - 1]
-            val z = zCoords[i]; val scale = fov / (z + 0.1f); val scalePrev = fov / (zCoords[i-1] + 0.1f)
+            val y = RoadGeometry.yCoords[i]; val yP = RoadGeometry.yCoords[i - 1]
+            val z = RoadGeometry.zCoords[i]; val scale = fov / (z + 0.1f)
+            val zP = RoadGeometry.zCoords[i - 1]; val scaleP = fov / (zP + 0.1f)
 
-            roadPath.moveTo(leftShoulderX[i], y); roadPath.lineTo(rightShoulderX[i], y)
-            roadPath.lineTo(rightShoulderX[i - 1], yPrev); roadPath.lineTo(leftShoulderX[i - 1], yPrev); roadPath.close()
+            fun addRect(arr: FloatArray, idx: Int, x1: Float, x2: Float, x1P: Float, x2P: Float): Int {
+                var cur = idx
+                if (cur + 12 > MAX_VERTICES) return cur
+                arr[cur++] = x1;  arr[cur++] = y
+                arr[cur++] = x1P; arr[cur++] = yP
+                arr[cur++] = x2P; arr[cur++] = yP
+                arr[cur++] = x1;  arr[cur++] = y
+                arr[cur++] = x2P; arr[cur++] = yP
+                arr[cur++] = x2;  arr[cur++] = y
+                return cur
+            }
 
-            roadPath.moveTo(oppLeftShoulderX[i], y); roadPath.lineTo(oppRightShoulderX[i], y)
-            roadPath.lineTo(oppRightShoulderX[i - 1], yPrev); roadPath.lineTo(oppLeftShoulderX[i - 1], yPrev); roadPath.close()
+            rvIdx = addRect(roadVertices, rvIdx, RoadGeometry.leftShoulderX[i], RoadGeometry.rightShoulderX[i], RoadGeometry.leftShoulderX[i-1], RoadGeometry.rightShoulderX[i-1])
+            rvIdx = addRect(roadVertices, rvIdx, RoadGeometry.oppLeftShoulderX[i], RoadGeometry.oppRightShoulderX[i], RoadGeometry.oppLeftShoulderX[i-1], RoadGeometry.oppRightShoulderX[i-1])
+            rvIdx = addRect(roadVertices, rvIdx, RoadGeometry.rightShoulderX[i], RoadGeometry.oppLeftShoulderX[i], RoadGeometry.rightShoulderX[i-1], RoadGeometry.oppLeftShoulderX[i-1])
 
-            roadPath.moveTo(rightShoulderX[i], y); roadPath.lineTo(oppLeftShoulderX[i], y)
-            roadPath.lineTo(oppLeftShoulderX[i - 1], yPrev); roadPath.lineTo(rightShoulderX[i - 1], yPrev); roadPath.close()
+            val mHW = (GameSettings.MEDIAN_WIDTH * scale * stretch) * 0.5f
+            val mHWP = (GameSettings.MEDIAN_WIDTH * scaleP * stretch) * 0.5f
+            val mCX = (RoadGeometry.rightShoulderX[i] + RoadGeometry.oppLeftShoulderX[i]) * 0.5f
+            val mCXP = (RoadGeometry.rightShoulderX[i-1] + RoadGeometry.oppLeftShoulderX[i-1]) * 0.5f
+            mvIdx = addRect(medianVertices, mvIdx, mCX - mHW, mCX + mHW, mCXP - mHWP, mCXP + mHWP)
 
-            val medianCenterX = (rightShoulderX[i] + oppLeftShoulderX[i]) / 2f
-            val medianCenterXPrev = (rightShoulderX[i-1] + oppLeftShoulderX[i-1]) / 2f
-            val mHalfW = (GameSettings.MEDIAN_WIDTH * scale * stretch) / 2f
-            val mHalfWPrev = (GameSettings.MEDIAN_WIDTH * scalePrev * stretch) / 2f
-            medianConcretePath.moveTo(medianCenterX - mHalfW, y); medianConcretePath.lineTo(medianCenterX + mHalfW, y)
-            medianConcretePath.lineTo(medianCenterXPrev + mHalfWPrev, yPrev); medianConcretePath.lineTo(medianCenterXPrev - mHalfWPrev, yPrev); medianConcretePath.close()
+            ruvIdx = addRect(rumbleVertices, ruvIdx, RoadGeometry.leftOuterX[i], RoadGeometry.leftInnerX[i], RoadGeometry.leftOuterX[i-1], RoadGeometry.leftInnerX[i-1])
+            ruvIdx = addRect(rumbleVertices, ruvIdx, RoadGeometry.rightInnerX[i], RoadGeometry.rightOuterX[i], RoadGeometry.rightInnerX[i-1], RoadGeometry.rightOuterX[i-1])
 
-            rumblePath.moveTo(leftOuterX[i], y); rumblePath.lineTo(leftInnerX[i], y)
-            rumblePath.lineTo(leftInnerX[i - 1], yPrev); rumblePath.lineTo(leftOuterX[i - 1], yPrev); rumblePath.close()
-            rumblePath.moveTo(rightInnerX[i], y); rumblePath.lineTo(rightOuterX[i], y)
-            rumblePath.lineTo(rightOuterX[i - 1], yPrev); rumblePath.lineTo(rightInnerX[i - 1], yPrev); rumblePath.close()
-
-            if ((playerDist + zCoords[i-1]) % totalPattern < dashLen) {
-                val dashHalfW = (laneMarkerW * scale * stretch) / 2f
-                val dashHalfWPrev = (laneMarkerW * scalePrev * stretch) / 2f
-                lanePath.moveTo(centerX[i] - dashHalfW, y); lanePath.lineTo(centerX[i] + dashHalfW, y)
-                lanePath.lineTo(centerX[i - 1] + dashHalfWPrev, yPrev); lanePath.lineTo(centerX[i - 1] - dashHalfWPrev, yPrev); lanePath.close()
-                lanePath.moveTo(oppCenterX[i] - dashHalfW, y); lanePath.lineTo(oppCenterX[i] + dashHalfW, y)
-                lanePath.lineTo(oppCenterX[i - 1] + dashHalfWPrev, yPrev); lanePath.lineTo(oppCenterX[i - 1] - dashHalfWPrev, yPrev); lanePath.close()
+            if ((playerDist + zP) % totalPattern < dashLen) {
+                val dW = (laneMarkerW * scale * stretch) * 0.5f
+                val dWP = (laneMarkerW * scaleP * stretch) * 0.5f
+                lvIdx = addRect(laneVertices, lvIdx, RoadGeometry.centerX[i] - dW, RoadGeometry.centerX[i] + dW, RoadGeometry.centerX[i-1] - dWP, RoadGeometry.centerX[i-1] + dWP)
+                lvIdx = addRect(laneVertices, lvIdx, RoadGeometry.oppCenterX[i] - dW, RoadGeometry.oppCenterX[i] + dW, RoadGeometry.oppCenterX[i-1] - dWP, RoadGeometry.oppCenterX[i-1] + dWP)
             }
             
-            val h_ = GameSettings.GUARDRAIL_HEIGHT * scale
-            RoadObjectRenderer.addPostPath(playerDist, y, z, zCoords[i-1], leftShoulderX[i], rightShoulderX[i], y - h_, sunRelHeading, isOpposite = false)
-            RoadObjectRenderer.addPostPath(playerDist, y, z, zCoords[i-1], oppLeftShoulderX[i], oppRightShoulderX[i], y - h_, sunRelHeading, isOpposite = true)
+            RoadObjectRenderer.addPostPath(playerDist, y, z, zP, RoadGeometry.leftShoulderX[i], RoadGeometry.rightShoulderX[i], y - GameSettings.GUARDRAIL_HEIGHT * scale, sunRelHeading, false)
+            RoadObjectRenderer.addPostPath(playerDist, y, z, zP, RoadGeometry.oppLeftShoulderX[i], RoadGeometry.oppRightShoulderX[i], y - GameSettings.GUARDRAIL_HEIGHT * scale, sunRelHeading, true)
         }
 
-        canvas.drawPath(roadPath, asphaltPaint)
-        canvas.drawPath(medianConcretePath, concretePaint)
-        canvas.drawPath(rumblePath, whitePaint)
-        canvas.drawPath(lanePath, whitePaint)
+        if (rvIdx > 0) canvas.drawVertices(Canvas.VertexMode.TRIANGLES, rvIdx, roadVertices, 0, null, 0, null, 0, null, 0, 0, asphaltPaint)
+        if (mvIdx > 0) canvas.drawVertices(Canvas.VertexMode.TRIANGLES, mvIdx, medianVertices, 0, null, 0, null, 0, null, 0, 0, concretePaint)
+        if (ruvIdx > 0) canvas.drawVertices(Canvas.VertexMode.TRIANGLES, ruvIdx, rumbleVertices, 0, null, 0, null, 0, null, 0, 0, whitePaint)
+        if (lvIdx > 0) canvas.drawVertices(Canvas.VertexMode.TRIANGLES, lvIdx, laneVertices, 0, null, 0, null, 0, null, 0, 0, whitePaint)
 
-        // --- ヘッドライト描画 (夜間のみ) ---
-        if (dayFactor < 0.4f) {
-            drawHeadlights(canvas, w, h, dayFactor)
-        }
-
+        if (dayFactor < 0.4f) drawHeadlights(canvas, w, h, dayFactor)
         drawSkidMarks(canvas, w, state, playerDist)
 
-        val postInterval = GameSettings.GUARDRAIL_POST_INTERVAL
-        val startPostIdx = (playerDist / postInterval).toInt()
-        val endPostIdx = ((playerDist + GameSettings.DRAW_DISTANCE) / postInterval).toInt()
-        for (pIdx in endPostIdx downTo startPostIdx) {
-            val worldZStart = pIdx * postInterval; val z1 = worldZStart - playerDist; val z2 = z1 + postInterval + GameSettings.GUARDRAIL_SLEEVE_WIDTH
+        val postInt = GameSettings.GUARDRAIL_POST_INTERVAL
+        val startP = (playerDist / postInt).toInt()
+        val endP = ((playerDist + GameSettings.DRAW_DISTANCE) / postInt).toInt()
+        for (pIdx in endP downTo startP) {
+            val wZ1 = pIdx * postInt; val z1 = wZ1 - playerDist; val z2 = z1 + postInt + GameSettings.GUARDRAIL_SLEEVE_WIDTH
             if (z1 < 0 && z2 < 0) continue
             if (z1 > GameSettings.DRAW_DISTANCE) continue
             val p1 = RoadGeometry.interpolate(z1.coerceAtLeast(0.1f)); val p2 = RoadGeometry.interpolate(z2.coerceAtMost(GameSettings.DRAW_DISTANCE.toFloat()))
@@ -168,22 +133,22 @@ object RoadRenderer {
                 RoadObjectRenderer.addGuardrailSegment(p1.oppRx, p2.oppRx, p1.oppRx, p2.oppRx, p1.y - h1, p2.y - h2, p1.y - h1 + ph1, p2.y - h2 + ph2, sunRelHeading)
             }
         }
-        RoadObjectRenderer.draw(canvas)
+        RoadObjectRenderer.draw(canvas, dayFactor)
     }
 
     private fun updatePaintsBrightness(dayFactor: Float) {
         val b = (0.2f + 0.8f * dayFactor).coerceIn(0.1f, 1.0f)
-        fun applyB(c: Int) = Color.rgb((Color.red(c) * b).toInt(), (Color.green(c) * b).toInt(), (Color.blue(c) * b).toInt())
+        fun applyB(c: Int): Int = Color.rgb((Color.red(c) * b).toInt(), (Color.green(c) * b).toInt(), (Color.blue(c) * b).toInt())
         asphaltPaint.color = applyB(GameSettings.COLOR_ROAD_DARK)
         whitePaint.color = applyB(GameSettings.COLOR_LANE)
-        concretePaint.color = applyB(Color.parseColor("#999999"))
+        concretePaint.color = applyB(colorConcreteDefault)
         skidMarkPaint.color = applyB(GameSettings.COLOR_SKIDMARK)
     }
 
     private fun drawHeadlights(canvas: Canvas, w: Float, h: Float, dayFactor: Float) {
         val alpha = ((0.4f - dayFactor) / 0.4f * 120).toInt().coerceIn(0, 150)
-        val centerX = w / 2f; val centerY = h * 0.95f
-        val radiusW = w * 0.6f; val radiusH = h * 0.4f
+        val centerX = w * 0.5f; val centerY = h * 0.95f
+        val radiusW = w * 0.6f
         headlightPaint.shader = RadialGradient(centerX, centerY, radiusW, 
             intArrayOf(Color.argb(alpha, 255, 255, 200), Color.TRANSPARENT), 
             floatArrayOf(0.3f, 1.0f), Shader.TileMode.CLAMP)
@@ -193,23 +158,26 @@ object RoadRenderer {
 
     private fun drawSkidMarks(canvas: Canvas, w: Float, state: GameState, playerDist: Float) {
         if (state.skidMarks.size < 2) return
-        val treadHalfW = 0.75f; val stretch = GameSettings.ROAD_STRETCH; val tireW = 0.22f
-        var prevMark: GameState.SkidMark? = null; var pPrevL: Pair<Float, Float>? = null; var pPrevR: Pair<Float, Float>? = null
+        val tHW = 0.75f; val str = GameSettings.ROAD_STRETCH; val tW = 0.22f
+        var pM: GameState.SkidMark? = null; var pL: Pair<Float, Float>? = null; var pR: Pair<Float, Float>? = null
         for (mark in state.skidMarks) {
             val z = mark.distance - playerDist
-            if (z < 0.1f || z > GameSettings.DRAW_DISTANCE) { prevMark = null; pPrevL = null; pPrevR = null; continue }
-            val res = RoadGeometry.interpolate(z)
-            if (res == null) { prevMark = null; pPrevL = null; pPrevR = null; continue }
-            val screenCenterX = res.centerX + (mark.playerX - state.playerX) * res.scale * stretch
-            val offsetInPixels = treadHalfW * res.scale * stretch
-            val curLX = screenCenterX - offsetInPixels; val curRX = screenCenterX + offsetInPixels; val curY = res.y
-            if (prevMark != null && mark.opacity > 0f && prevMark.opacity > 0f) {
-                val alpha = (mark.opacity * 180).toInt().coerceIn(0, 255)
-                skidMarkPaint.alpha = alpha; skidMarkPaint.strokeWidth = tireW * res.scale * stretch
-                pPrevL?.let { canvas.drawLine(it.first, it.second, curLX, curY, skidMarkPaint) }
-                pPrevR?.let { canvas.drawLine(it.first, it.second, curRX, curY, skidMarkPaint) }
+            if (z < 0.1f || z > GameSettings.DRAW_DISTANCE) { pM = null; pL = null; pR = null; }
+            else {
+                val res = RoadGeometry.interpolate(z)
+                if (res == null) { pM = null; pL = null; pR = null; }
+                else {
+                    val sCX = res.centerX + (mark.playerX - state.playerX) * res.scale * str
+                    val oP = tHW * res.scale * str; val cLX = sCX - oP; val cRX = sCX + oP; val cY = res.y
+                    if (pM != null && mark.opacity > 0f && pM!!.opacity > 0f) {
+                        skidMarkPaint.alpha = (mark.opacity * 180).toInt().coerceIn(0, 255)
+                        skidMarkPaint.strokeWidth = tW * res.scale * str
+                        pL?.let { canvas.drawLine(it.first, it.second, cLX, cY, skidMarkPaint) }
+                        pR?.let { canvas.drawLine(it.first, it.second, cRX, cY, skidMarkPaint) }
+                    }
+                    pL = Pair(cLX, cY); pR = Pair(cRX, cY); pM = mark
+                }
             }
-            pPrevL = Pair(curLX, curY); pPrevR = Pair(curRX, curY); prevMark = mark
         }
     }
 }
