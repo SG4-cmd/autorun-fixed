@@ -33,6 +33,11 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
     private var frameCount = 0
     private var currentFps = 0
 
+    // デベロッパーモード切り替え用
+    private var isSpeedometerTouching = false
+    private var isTachometerTouching = false
+    private var dualTouchStartTime = 0L
+
     fun setGameState(state: GameState) {
         this.gameState = state
     }
@@ -61,12 +66,33 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         if (w <= 0 || h <= 0) return
 
         calculateFps(state)
+        checkDeveloperModeActivation(state)
 
         // HDUを描画 (UI FPS, エンジン音, 音楽プレーヤーを渡す)
         HDU.draw(canvas, w, h, state, currentFps, font7Bar, fontWarrior, fontWarrior, engineSound, musicPlayer, context)
         
         // 描画ループを継続
         invalidate()
+    }
+
+    /**
+     * スピードメーターとタコメーターの同時長押しを判定します。
+     */
+    private fun checkDeveloperModeActivation(state: GameState) {
+        if (isSpeedometerTouching && isTachometerTouching) {
+            if (dualTouchStartTime == 0L) {
+                dualTouchStartTime = System.currentTimeMillis()
+            } else if (System.currentTimeMillis() - dualTouchStartTime > 1000) {
+                // 1秒以上経過でトグル
+                state.isDeveloperMode = !state.isDeveloperMode
+                // 連続発動を防ぐためにリセット
+                isSpeedometerTouching = false
+                isTachometerTouching = false
+                dualTouchStartTime = 0L
+            }
+        } else {
+            dualTouchStartTime = 0L
+        }
     }
 
     /**
@@ -98,6 +124,10 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
 
         when (action) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                // メーターへのタッチ判定
+                if (HDU.speedRect.contains(x, y)) isSpeedometerTouching = true
+                if (HDU.rpmRect.contains(x, y)) isTachometerTouching = true
+
                 // ナビUIのボタン判定を優先
                 if (HDUMap.handleTouch(x, y, state, false, context, musicPlayer)) {
                     return true
@@ -120,6 +150,16 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                // メーターからの離脱判定
+                if (HDU.speedRect.contains(x, y)) isSpeedometerTouching = false
+                if (HDU.rpmRect.contains(x, y)) isTachometerTouching = false
+                
+                // 全ての指が離れた場合はリセット
+                if (event.pointerCount <= 1) {
+                    isSpeedometerTouching = false
+                    isTachometerTouching = false
+                }
+
                 // ナビUIのタップ確定処理
                 if (action != MotionEvent.ACTION_CANCEL) {
                     if (HDUMap.handleTouch(x, y, state, true, context, musicPlayer)) {
@@ -138,6 +178,10 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                     refreshCameraDirs(event, actionIndex, state)
                 }
             }
+            MotionEvent.ACTION_MOVE -> {
+                // 移動中にメーター外に出た場合の判定を更新（オプション）
+                updateMeterTouchState(event)
+            }
         }
 
         handleDrivingInput(event, state)
@@ -145,6 +189,19 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         return true
     }
     
+    private fun updateMeterTouchState(event: MotionEvent) {
+        var speedFound = false
+        var rpmFound = false
+        for (i in 0 until event.pointerCount) {
+            val tx = event.getX(i)
+            val ty = event.getY(i)
+            if (HDU.speedRect.contains(tx, ty)) speedFound = true
+            if (HDU.rpmRect.contains(tx, ty)) rpmFound = true
+        }
+        isSpeedometerTouching = speedFound
+        isTachometerTouching = rpmFound
+    }
+
     private fun cleanUpPointer(pointerId: Int) {
         steerStartAngle.remove(pointerId)
         throttleStartPosY.remove(pointerId)
