@@ -7,6 +7,8 @@ import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.res.ResourcesCompat
 import com.example.autorun.R
+import com.example.autorun.audio.EngineSoundRenderer
+import com.example.autorun.audio.MusicPlayer
 import com.example.autorun.core.GameState
 import kotlin.math.atan2
 
@@ -17,6 +19,9 @@ import kotlin.math.atan2
 class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
 
     private var gameState: GameState? = null
+    private var engineSound: EngineSoundRenderer? = null
+    private var musicPlayer: MusicPlayer? = null
+    
     private val font7Bar by lazy { try { ResourcesCompat.getFont(context, R.font.gotikakutto_005_851) } catch (e: Exception) { null } }
     private val fontWarrior by lazy { try { ResourcesCompat.getFont(context, R.font.gotikakutto_005_851) } catch (e: Exception) { null } }
 
@@ -24,8 +29,20 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
     private val steerInitialInput = mutableMapOf<Int, Float>()
     private val throttleStartPosY = mutableMapOf<Int, Float>()
 
+    private var lastFpsUpdateTime = 0L
+    private var frameCount = 0
+    private var currentFps = 0
+
     fun setGameState(state: GameState) {
         this.gameState = state
+    }
+    
+    fun setEngineSound(engineSound: EngineSoundRenderer) {
+        this.engineSound = engineSound
+    }
+    
+    fun setMusicPlayer(player: MusicPlayer) {
+        this.musicPlayer = player
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -43,8 +60,32 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         val h = height.toFloat()
         if (w <= 0 || h <= 0) return
 
-        HDU.draw(canvas, w, h, state, 0, font7Bar, fontWarrior, fontWarrior, null, null, context)
+        calculateFps(state)
+
+        // HDUを描画 (UI FPS, エンジン音, 音楽プレーヤーを渡す)
+        HDU.draw(canvas, w, h, state, currentFps, font7Bar, fontWarrior, fontWarrior, engineSound, musicPlayer, context)
+        
+        // 描画ループを継続
         invalidate()
+    }
+
+    /**
+     * UI(Canvas)の描画フレームレートを計測します。
+     */
+    private fun calculateFps(state: GameState) {
+        val now = System.currentTimeMillis()
+        if (lastFpsUpdateTime == 0L) {
+            lastFpsUpdateTime = now
+            return
+        }
+        
+        frameCount++
+        if (now - lastFpsUpdateTime >= 1000) {
+            currentFps = frameCount
+            state.currentFps = currentFps
+            frameCount = 0
+            lastFpsUpdateTime = now
+        }
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -57,6 +98,12 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
 
         when (action) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                // ナビUIのボタン判定を優先
+                if (HDUMap.handleTouch(x, y, state, false, context, musicPlayer)) {
+                    return true
+                }
+
+                // カメラ操作UI判定
                 when {
                     HDU.camUpRect.contains(x, y) -> state.activeCameraDirs.add(0)
                     HDU.camDownRect.contains(x, y) -> state.activeCameraDirs.add(1)
@@ -73,25 +120,51 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                state.activeCameraDirs.clear() 
-                for (i in 0 until event.pointerCount) {
-                    if (i == actionIndex) continue
-                    val tx = event.getX(i); val ty = event.getY(i)
-                    if (HDU.camUpRect.contains(tx, ty)) state.activeCameraDirs.add(0)
-                    if (HDU.camDownRect.contains(tx, ty)) state.activeCameraDirs.add(1)
-                    if (HDU.camLeftRect.contains(tx, ty)) state.activeCameraDirs.add(2)
-                    if (HDU.camRightRect.contains(tx, ty)) state.activeCameraDirs.add(3)
-                    if (HDU.camForwardRect.contains(tx, ty)) state.activeCameraDirs.add(4)
-                    if (HDU.camBackwardRect.contains(tx, ty)) state.activeCameraDirs.add(5)
+                // ナビUIのタップ確定処理
+                if (action != MotionEvent.ACTION_CANCEL) {
+                    if (HDUMap.handleTouch(x, y, state, true, context, musicPlayer)) {
+                        cleanUpPointer(pointerId)
+                        return true
+                    }
                 }
-                steerStartAngle.remove(pointerId)
-                throttleStartPosY.remove(pointerId)
+
+                cleanUpPointer(pointerId)
+                
                 if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                     state.activeCameraDirs.clear()
+                    state.radioBtnDir = 0
+                    state.radioBtnDownStartTime = 0
+                } else {
+                    refreshCameraDirs(event, actionIndex, state)
                 }
             }
         }
 
+        handleDrivingInput(event, state)
+        performClick()
+        return true
+    }
+    
+    private fun cleanUpPointer(pointerId: Int) {
+        steerStartAngle.remove(pointerId)
+        throttleStartPosY.remove(pointerId)
+    }
+
+    private fun refreshCameraDirs(event: MotionEvent, actionIndex: Int, state: GameState) {
+        state.activeCameraDirs.clear()
+        for (i in 0 until event.pointerCount) {
+            if (i == actionIndex) continue
+            val tx = event.getX(i); val ty = event.getY(i)
+            if (HDU.camUpRect.contains(tx, ty)) state.activeCameraDirs.add(0)
+            if (HDU.camDownRect.contains(tx, ty)) state.activeCameraDirs.add(1)
+            if (HDU.camLeftRect.contains(tx, ty)) state.activeCameraDirs.add(2)
+            if (HDU.camRightRect.contains(tx, ty)) state.activeCameraDirs.add(3)
+            if (HDU.camForwardRect.contains(tx, ty)) state.activeCameraDirs.add(4)
+            if (HDU.camBackwardRect.contains(tx, ty)) state.activeCameraDirs.add(5)
+        }
+    }
+
+    private fun handleDrivingInput(event: MotionEvent, state: GameState) {
         var sInput = 0f; var tInput = 0f; var br = false
         var isSteeringActive = false; var isThrottleActive = false
         for (i in 0 until event.pointerCount) {
@@ -101,7 +174,6 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                 val currentAngle = Math.toDegrees(atan2((ty - HDU.steerRect.centerY()).toDouble(), (tx - HDU.steerRect.centerX()).toDouble())).toFloat()
                 var delta = currentAngle - steerStartAngle[id]!!
                 if (delta > 180f) delta -= 360f else if (delta < -180f) delta += 360f
-                // 修正点: delta の加算方向を反転させ、操作感を一致させる
                 sInput = (steerInitialInput[id]!! + delta / 135f).coerceIn(-1f, 1f)
                 isSteeringActive = true
             }
@@ -114,9 +186,6 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         state.rawSteeringInput = if (isSteeringActive) sInput else 0f
         state.rawThrottleInput = if (isThrottleActive) tInput else 0f
         state.isBraking = br
-
-        performClick()
-        return true
     }
     
     override fun performClick(): Boolean {

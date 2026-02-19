@@ -26,6 +26,9 @@ class GameView(context: Context, attrs: AttributeSet? = null) : GLSurfaceView(co
     private var lastFrameTimeNanos: Long = 0L
     private var accumulator: Float = 0f
     private val fixedDt = GamePerformanceSettings.PHYSICS_DT
+    
+    private var fpsCount = 0
+    private var lastFpsTime = 0L
 
     init {
         setEGLContextClientVersion(2)
@@ -34,9 +37,9 @@ class GameView(context: Context, attrs: AttributeSet? = null) : GLSurfaceView(co
     }
 
     fun getGameState(): GameState = state
+    fun getEngineSound(): EngineSoundRenderer = engineSound
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-        // Contextを渡してモデル読み込みを可能にする
         GesoEngine3D.init(context)
     }
 
@@ -47,6 +50,15 @@ class GameView(context: Context, attrs: AttributeSet? = null) : GLSurfaceView(co
     override fun onDrawFrame(gl: GL10?) {
         updatePhysics()
         GesoEngine3D.draw(state)
+        
+        // FPS計算 (Engine / 3D)
+        fpsCount++
+        val now = System.currentTimeMillis()
+        if (now - lastFpsTime >= 1000) {
+            state.engineFps = fpsCount
+            fpsCount = 0
+            lastFpsTime = now
+        }
     }
 
     private fun updatePhysics() {

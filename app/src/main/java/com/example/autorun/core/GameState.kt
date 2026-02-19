@@ -64,7 +64,8 @@ class GameState {
     var isSettingsOpen = false
     var isLayoutMode = false 
     var selectedUiId = -1 
-    var currentFps = 60
+    var currentFps = 60 // UI FPS
+    var engineFps = 60  // Engine (3D) FPS
     var batteryLevel = 100
     var isHighBeam = false
     
@@ -111,6 +112,17 @@ class GameState {
         val dt = GamePerformanceSettings.PHYSICS_DT
         val specs = VehicleDatabase.getSelectedVehicle()
         gameTimeMillis = (System.nanoTime() - startTimeNanos) / 1_000_000L
+
+        // ラジオの自動選局ロジック
+        if (radioBtnDir != 0 && radioBtnDownStartTime > 0) {
+            val now = System.currentTimeMillis()
+            if (now - radioBtnDownStartTime > 500) { // 長押し
+                if (now - lastFreqChangeTime > 100) { // 0.1秒ごとに更新
+                    radioFrequency = (radioFrequency + radioBtnDir * 0.1f).coerceIn(RADIO_MIN, RADIO_MAX)
+                    lastFreqChangeTime = now
+                }
+            }
+        }
 
         if (!isManualTransmission && isStalled && rawThrottleInput > 0.01f) {
             isStalled = false; engineRPM = 800f 

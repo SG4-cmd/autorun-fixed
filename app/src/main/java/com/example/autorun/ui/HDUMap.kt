@@ -171,8 +171,9 @@ object HDUMap {
         val battRect = RectF(btnSettingsRect.left - battW - 25f * uiScale, btnSettingsRect.centerY() - battH / 2f, btnSettingsRect.left - 25f * uiScale, btnSettingsRect.centerY() + battH / 2f)
         drawBatteryIcon(canvas, battRect, state.batteryLevel, uiScale)
         
-        infoPaint.textSize = 22f * uiScale
-        canvas.drawText("FRAME: ${state.currentFps} FPS", mapRect.left + 35f * uiScale, mapRect.top + 230f * uiScale, infoPaint)
+        infoPaint.textSize = 20f * uiScale
+        canvas.drawText("UI FPS: ${state.currentFps}", mapRect.left + 35f * uiScale, mapRect.top + 230f * uiScale, infoPaint)
+        canvas.drawText("ENGINE FPS: ${state.engineFps}", mapRect.left + 180f * uiScale, mapRect.top + 230f * uiScale, infoPaint)
 
         canvas.drawRoundRect(btnLightRect, 8f * uiScale, 8f * uiScale, if (state.isHighBeam) activeBtnPaint else btnPaint)
         btnTextPaint.textSize = 20f * uiScale
@@ -370,7 +371,7 @@ object HDUMap {
             state.radioBtnDir = 0; state.radioBtnDownStartTime = 0
             if (btnHomeRect.contains(x, y)) { state.navMode = GameState.NavMode.HOME; return true }
             if (btnMapRect.contains(x, y)) { state.navMode = GameState.NavMode.MAP; return true }
-            if (btnMusicRect.contains(x, y)) { state.navMode = GameState.NavMode.MUSIC; return true }
+            if (btnMusicPlayerRectContains(x, y)) { state.navMode = GameState.NavMode.MUSIC; return true }
             if (btnRadioRect.contains(x, y)) { state.navMode = GameState.NavMode.RADIO; return true }
             if (state.navMode == GameState.NavMode.HOME) {
                 if (btnSettingsRect.contains(x, y)) { state.isSettingsOpen = true; return true }
@@ -411,4 +412,6 @@ object HDUMap {
         }
         return isAnyBtnHit
     }
+
+    private fun btnMusicPlayerRectContains(x: Float, y: Float): Boolean = btnMusicRect.contains(x, y)
 }

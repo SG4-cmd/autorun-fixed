@@ -11,8 +11,8 @@ import java.util.Locale
 import kotlin.math.*
 
 /**
- * 【HDUDebugOverlay: サウンド解析・メモリプロファイラ】
- * 以前のデータの表示項目を反映。
+ * 【HDUDebugOverlay: システムモニタ】
+ * FPS、メモリ、エンジンスペックなどをリアルタイム表示。
  */
 object HDUDebugOverlay {
     private val paint = Paint().apply { isAntiAlias = true }
@@ -71,7 +71,7 @@ object HDUDebugOverlay {
         paint.style = Paint.Style.FILL; paint.color = Color.DKGRAY; paint.alpha = 150
         canvas.drawRoundRect(dragHandleRect, 12f, 12f, paint)
         paint.color = Color.YELLOW; paint.textSize = 22f; paint.typeface = Typeface.DEFAULT_BOLD
-        canvas.drawText("RB26 MONITOR", dragHandleRect.left + 25f, dragHandleRect.centerY() + 10f, paint)
+        canvas.drawText("SYSTEM MONITOR", dragHandleRect.left + 25f, dragHandleRect.centerY() + 10f, paint)
 
         val sidebarRect = RectF(posX, posY + DRAG_HANDLE_HEIGHT, posX + SIDEBAR_WIDTH, posY + pH)
         paint.color = Color.BLACK; paint.alpha = 80; canvas.drawRect(sidebarRect, paint)
@@ -113,18 +113,18 @@ object HDUDebugOverlay {
     }
 
     private fun drawOverview(canvas: Canvas, rect: RectF, state: GameState, fps: Int) {
-        var y = rect.top; val lH = 50f
+        var y = rect.top; val lH = 45f
         paint.textSize = 22f
-        drawValueBar(canvas, "FPS ", fps.toFloat(), 120f, rect.left, y, rect.width(), Color.GREEN); y += lH
-        drawValueBar(canvas, "SPD ", state.calculatedSpeedKmH, 320f, rect.left, y, rect.width(), Color.CYAN); y += lH
-        drawValueBar(canvas, "RPM ", state.engineRPM, 9000f, rect.left, y, rect.width(), Color.YELLOW); y += lH
-        drawValueBar(canvas, "THR ", state.throttle * 100f, 100f, rect.left, y, rect.width(), Color.MAGENTA); y += lH
-        drawValueBar(canvas, "BST ", (state.turboBoost + 1.0f) * 50f, 100f, rect.left, y, rect.width(), Color.RED); y += lH
+        drawValueBar(canvas, "UI FPS", state.currentFps.toFloat(), 120f, rect.left, y, rect.width(), Color.GREEN); y += lH
+        drawValueBar(canvas, "ENG FPS", state.engineFps.toFloat(), 120f, rect.left, y, rect.width(), Color.parseColor("#44FF88")); y += lH
+        drawValueBar(canvas, "SPD KMH", state.calculatedSpeedKmH, 320f, rect.left, y, rect.width(), Color.CYAN); y += lH
+        drawValueBar(canvas, "ENG RPM", state.engineRPM, 9000f, rect.left, y, rect.width(), Color.YELLOW); y += lH
+        drawValueBar(canvas, "THROTTLE", state.throttle * 100f, 100f, rect.left, y, rect.width(), Color.MAGENTA); y += lH
+        drawValueBar(canvas, "BOOST  ", (state.turboBoost + 1.0f) * 50f, 100f, rect.left, y, rect.width(), Color.RED); y += lH
         
-        // 追加: 走行距離
         val distKm = state.playerDistance / 1000f
         val totalKm = CourseManager.getTotalDistance() / 1000f
-        drawValueBar(canvas, "DIST", distKm, totalKm, rect.left, y, rect.width(), Color.WHITE); y += lH
+        drawValueBar(canvas, "DIST KM", distKm, totalKm, rect.left, y, rect.width(), Color.WHITE); y += lH
         
         paint.color = Color.WHITE
         canvas.drawText("GEAR: ${state.currentGear}", rect.left, y + 25f, paint)
@@ -143,10 +143,10 @@ object HDUDebugOverlay {
 
     private fun drawValueBar(canvas: Canvas, label: String, value: Float, maxVal: Float, x: Float, y: Float, width: Float, color: Int) {
         paint.color = Color.WHITE
-        canvas.drawText(String.format(Locale.US, "%s: %7.1f", label, value), x, y + 25f, paint)
+        canvas.drawText(String.format(Locale.US, "%-8s: %6.1f", label, value), x, y + 25f, paint)
         
-        val barX = x + 180f
-        val barW = width - 200f
+        val barX = x + 240f
+        val barW = (width - 260f).coerceAtLeast(10f)
         val barH = 30f
         val progress = if (maxVal > 0) (value / maxVal).coerceIn(0f, 1f) else 0f
         

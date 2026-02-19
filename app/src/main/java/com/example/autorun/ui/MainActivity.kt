@@ -14,11 +14,13 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.autorun.R
+import com.example.autorun.audio.MusicPlayer
 import com.example.autorun.config.GameSettings
 
 class MainActivity : AppCompatActivity() {
 
     private var lastBackTime = 0L
+    private lateinit var musicPlayer: MusicPlayer
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,7 +34,14 @@ class MainActivity : AppCompatActivity() {
         // 3Dエンジンの状態を2D UIレイヤーに共有
         val gameView = findViewById<GameView>(R.id.game_view)
         val hduOverlay = findViewById<HDUOverlayView>(R.id.hdu_overlay)
+        
+        // 音楽プレイヤーの初期化
+        musicPlayer = MusicPlayer(this)
+        
+        // UIオーバーレイに各参照をセット
         hduOverlay.setGameState(gameView.getGameState())
+        hduOverlay.setEngineSound(gameView.getEngineSound())
+        hduOverlay.setMusicPlayer(musicPlayer)
 
         setupSystemUI()
         
