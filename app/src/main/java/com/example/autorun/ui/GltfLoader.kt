@@ -9,7 +9,7 @@ import java.nio.ByteOrder
 
 /**
  * 【GltfLoader: プロフェッショナル版】
- * モデルを全軸の中心に配置し、接地計算用のデータを保持します。
+ * マテリアルの基本色(baseColorFactor)にも対応し、モデルの色を正しく再現します。
  */
 object GltfLoader {
 
@@ -18,8 +18,8 @@ object GltfLoader {
         val indices: ShortArray,
         val colors: FloatArray,
         val normals: FloatArray,
-        val minZ: Float, // 回転後に高さとなる軸の最小値
-        val maxZ: Float  // 回転後に高さとなる軸の最大値
+        val minZ: Float,
+        val maxZ: Float
     )
 
     fun loadGlb(context: Context, fileName: String): ModelData? {
@@ -61,6 +61,7 @@ object GltfLoader {
 
             val nodes = json.optJSONArray("nodes")
             val meshes = json.optJSONArray("meshes")
+            val materials = json.optJSONArray("materials")
             val identity = FloatArray(16).apply { Matrix.setIdentityM(this, 0) }
 
             if (nodes != null && meshes != null) {
@@ -68,11 +69,11 @@ object GltfLoader {
                     val node = nodes.getJSONObject(i)
                     if (node.has("mesh")) {
                         val matrix = getNodeMatrix(node)
-                        processMesh(json, binBuffer, meshes.getJSONObject(node.getInt("mesh")), matrix, allVertices, allIndices, allColors, allNormals)
+                        processMesh(json, binBuffer, meshes.getJSONObject(node.getInt("mesh")), materials, matrix, allVertices, allIndices, allColors, allNormals)
                     }
                 }
             } else if (meshes != null) {
-                for (i in 0 until meshes.length()) processMesh(json, binBuffer, meshes.getJSONObject(i), identity, allVertices, allIndices, allColors, allNormals)
+                for (i in 0 until meshes.length()) processMesh(json, binBuffer, meshes.getJSONObject(i), materials, identity, allVertices, allIndices, allColors, allNormals)
             }
 
             val vArray = allVertices.toFloatArray()
@@ -88,23 +89,18 @@ object GltfLoader {
                 minZ = minOf(minZ, vArray[i+2]); maxZ = maxOf(maxZ, vArray[i+2])
             }
 
-            val sizeX = maxX - minX
-            val sizeY = maxY - minY
-            val sizeZ = maxZ - minZ
+            val sizeX = maxX - minX; val sizeY = maxY - minY; val sizeZ = maxZ - minZ
             val maxSize = maxOf(sizeX, maxOf(sizeY, sizeZ)).coerceAtLeast(0.001f)
 
-            // 全軸を中央(0)に寄せて正規化
             for (i in vArray.indices step 3) {
                 vArray[i] = (vArray[i] - (maxX + minX) / 2f) / maxSize
                 vArray[i+1] = (vArray[i+1] - (maxY + minY) / 2f) / maxSize
                 vArray[i+2] = (vArray[i+2] - (maxZ + minZ) / 2f) / maxSize
             }
 
-            // 回転後に「高さ」になるZ軸の正規化後の範囲を記録
             val normMinZ = (minZ - (maxZ + minZ) / 2f) / maxSize
             val normMaxZ = (maxZ - (maxZ + minZ) / 2f) / maxSize
 
-            Log.i("GltfLoader", "Normalized model centered. Height scale factor: $maxSize")
             return ModelData(vArray, allIndices.toShortArray(), allColors.toFloatArray(), allNormals.toFloatArray(), normMinZ, normMaxZ)
         } catch (e: Exception) {
             Log.e("GltfLoader", "Error: ${e.message}"); null
@@ -141,18 +137,22 @@ object GltfLoader {
         return matrix
     }
 
-    private fun processMesh(json: JSONObject, binBuffer: ByteBuffer, mesh: JSONObject, matrix: FloatArray, allVertices: MutableList<Float>, allIndices: MutableList<Short>, allColors: MutableList<Float>, allNormals: MutableList<Float>) {
+    private fun processMesh(json: JSONObject, binBuffer: ByteBuffer, mesh: JSONObject, materials: org.json.JSONArray?, matrix: FloatArray, allVertices: MutableList<Float>, allIndices: MutableList<Short>, allColors: MutableList<Float>, allNormals: MutableList<Float>) {
         val primitives = mesh.getJSONArray("primitives")
         for (p in 0 until primitives.length()) {
             val primitive = primitives.getJSONObject(p)
             val attributes = primitive.getJSONObject("attributes")
             val baseIdx = (allVertices.size / 3).toShort()
+            
+            // 頂点座標
             val vData = getFloatArray(json, binBuffer, attributes.getInt("POSITION"))
             for (i in vData.indices step 3) {
                 val res = FloatArray(4)
                 Matrix.multiplyMV(res, 0, matrix, 0, floatArrayOf(vData[i], vData[i+1], vData[i+2], 1f), 0)
                 allVertices.add(res[0]); allVertices.add(res[1]); allVertices.add(res[2])
             }
+
+            // 法線
             if (attributes.has("NORMAL")) {
                 val nData = getFloatArray(json, binBuffer, attributes.getInt("NORMAL"))
                 val nMatrix = matrix.clone().apply { this[12]=0f; this[13]=0f; this[14]=0f }
@@ -162,14 +162,35 @@ object GltfLoader {
                     allNormals.add(res[0]); allNormals.add(res[1]); allNormals.add(res[2])
                 }
             } else repeat(vData.size/3) { allNormals.add(0f); allNormals.add(1f); allNormals.add(0f) }
+
+            // インデックス
             if (primitive.has("indices")) {
                 val iData = getIndicesArray(json, binBuffer, primitive.getInt("indices"))
                 for (idx in iData) allIndices.add((idx + baseIdx).toShort())
             } else repeat(vData.size/3) { i -> allIndices.add((baseIdx + i).toShort()) }
+
+            // 色（頂点カラー、またはマテリアルの基本色）
             if (attributes.has("COLOR_0")) {
                 val cData = getColorArray(json, binBuffer, attributes.getInt("COLOR_0"))
                 for (c in cData) allColors.add(c)
-            } else repeat(vData.size/3) { allColors.add(0.7f); allColors.add(0.7f); allColors.add(0.7f); allColors.add(1.0f) }
+            } else {
+                // マテリアルカラーの取得
+                var r = 0.7f; var g = 0.7f; var b = 0.7f; var a = 1.0f
+                if (primitive.has("material") && materials != null) {
+                    val mat = materials.getJSONObject(primitive.getInt("material"))
+                    if (mat.has("pbrMetallicRoughness")) {
+                        val pbr = mat.getJSONObject("pbrMetallicRoughness")
+                        if (pbr.has("baseColorFactor")) {
+                            val factor = pbr.getJSONArray("baseColorFactor")
+                            r = factor.getDouble(0).toFloat()
+                            g = factor.getDouble(1).toFloat()
+                            b = factor.getDouble(2).toFloat()
+                            a = factor.getDouble(3).toFloat()
+                        }
+                    }
+                }
+                repeat(vData.size / 3) { allColors.add(r); allColors.add(g); allColors.add(b); allColors.add(a) }
+            }
         }
     }
 
