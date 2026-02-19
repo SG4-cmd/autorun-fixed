@@ -9,7 +9,7 @@ import java.nio.ByteOrder
 
 /**
  * 【GltfLoader: プロフェッショナル版】
- * 各軸を独立して正規化し、VehicleDatabaseのスペック値と完全に連動するように改善。
+ * モデルの比率を維持したまま正規化を行います。
  */
 object GltfLoader {
 
@@ -71,7 +71,7 @@ object GltfLoader {
             val vArray = allVertices.toFloatArray()
             if (vArray.isEmpty()) return null
 
-            // --- 軸別正規化 (スペック連動用) ---
+            // --- 比率維持の正規化 ---
             var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE
             var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
             var minZ = Float.MAX_VALUE; var maxZ = -Float.MAX_VALUE
@@ -82,17 +82,20 @@ object GltfLoader {
                 minZ = minOf(minZ, vArray[i+2]); maxZ = maxOf(maxZ, vArray[i+2])
             }
 
-            val sX = (maxX - minX).coerceAtLeast(0.001f)
-            val sY = (maxY - minY).coerceAtLeast(0.001f)
-            val sZ = (maxZ - minZ).coerceAtLeast(0.001f)
+            val sX = maxX - minX
+            val sY = maxY - minY
+            val sZ = maxZ - minZ
+            // 最大の辺の長さを基準にする（比率を壊さないため）
+            val maxSize = maxOf(sX, maxOf(sY, sZ)).coerceAtLeast(0.001f)
 
             for (i in vArray.indices step 3) {
-                vArray[i] = (vArray[i] - (maxX + minX) / 2f) / sX
-                vArray[i+1] = (vArray[i+1] - minY) / sY
-                vArray[i+2] = (vArray[i+2] - (maxZ + minZ) / 2f) / sZ
+                // X, Zは中央合わせ、Y（高さ）は接地（0）させる
+                vArray[i] = (vArray[i] - (maxX + minX) / 2f) / maxSize
+                vArray[i+1] = (vArray[i+1] - minY) / maxSize
+                vArray[i+2] = (vArray[i+2] - (maxZ + minZ) / 2f) / maxSize
             }
 
-            Log.i("GltfLoader", "Done: $fileName, Verts: ${vArray.size/3}")
+            Log.i("GltfLoader", "Success: $fileName, Ratio Preserved. Scale Factor: $maxSize")
             return ModelData(vArray, allIndices.toShortArray(), allColors.toFloatArray(), allNormals.toFloatArray())
         } catch (e: Exception) {
             Log.e("GltfLoader", "Error: ${e.message}"); null
@@ -135,14 +138,12 @@ object GltfLoader {
             val primitive = primitives.getJSONObject(p)
             val attributes = primitive.getJSONObject("attributes")
             val baseIdx = (allVertices.size / 3).toShort()
-            
             val vData = getFloatArray(json, binBuffer, attributes.getInt("POSITION"))
             for (i in vData.indices step 3) {
                 val res = FloatArray(4)
                 Matrix.multiplyMV(res, 0, matrix, 0, floatArrayOf(vData[i], vData[i+1], vData[i+2], 1f), 0)
                 allVertices.add(res[0]); allVertices.add(res[1]); allVertices.add(res[2])
             }
-
             if (attributes.has("NORMAL")) {
                 val nData = getFloatArray(json, binBuffer, attributes.getInt("NORMAL"))
                 val nMatrix = matrix.clone().apply { this[12]=0f; this[13]=0f; this[14]=0f }
@@ -151,23 +152,15 @@ object GltfLoader {
                     Matrix.multiplyMV(res, 0, nMatrix, 0, floatArrayOf(nData[i], nData[i+1], nData[i+2], 0f), 0)
                     allNormals.add(res[0]); allNormals.add(res[1]); allNormals.add(res[2])
                 }
-            } else {
-                repeat(vData.size / 3) { allNormals.add(0f); allNormals.add(1f); allNormals.add(0f) }
-            }
-
+            } else repeat(vData.size/3) { allNormals.add(0f); allNormals.add(1f); allNormals.add(0f) }
             if (primitive.has("indices")) {
                 val iData = getIndicesArray(json, binBuffer, primitive.getInt("indices"))
                 for (idx in iData) allIndices.add((idx + baseIdx).toShort())
-            } else {
-                repeat(vData.size / 3) { i -> allIndices.add((baseIdx + i).toShort()) }
-            }
-
+            } else repeat(vData.size/3) { i -> allIndices.add((baseIdx + i).toShort()) }
             if (attributes.has("COLOR_0")) {
                 val cData = getColorArray(json, binBuffer, attributes.getInt("COLOR_0"))
                 for (c in cData) allColors.add(c)
-            } else {
-                repeat(vData.size / 3) { allColors.add(0.7f); allColors.add(0.7f); allColors.add(0.7f); allColors.add(1.0f) }
-            }
+            } else repeat(vData.size/3) { allColors.add(0.7f); allColors.add(0.7f); allColors.add(0.7f); allColors.add(1.0f) }
         }
     }
 
@@ -175,8 +168,7 @@ object GltfLoader {
         val acc = json.getJSONArray("accessors").getJSONObject(idx)
         val bv = json.getJSONArray("bufferViews").getJSONObject(acc.getInt("bufferView"))
         val count = acc.getInt("count")
-        val type = acc.getString("type")
-        val num = when(type) { "VEC2"->2; "VEC3"->3; "VEC4"->4; else->1 }
+        val num = when(acc.getString("type")) { "VEC2"->2; "VEC3"->3; "VEC4"->4; else->1 }
         val off = bv.optInt("byteOffset", 0) + acc.optInt("byteOffset", 0)
         val stride = bv.optInt("byteStride", 0).let { if (it == 0) num * 4 else it }
         val res = FloatArray(count * num)

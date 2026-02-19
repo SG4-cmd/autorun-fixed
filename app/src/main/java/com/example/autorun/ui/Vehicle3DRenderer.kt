@@ -11,7 +11,7 @@ import java.nio.ShortBuffer
 
 /**
  * 【Vehicle3DRenderer】
- * モデルの向きをX軸回転で修正（寝ているモデルを起こす処理）。
+ * モデルの比率を維持したまま、全長(lengthM)を基準にスケーリング。
  */
 object Vehicle3DRenderer {
 
@@ -48,18 +48,20 @@ object Vehicle3DRenderer {
         val yOffset = if (isGltfModel) 0.0f else 0.3f
         Matrix.translateM(modelMatrix, 0, state.playerWorldX, state.playerWorldY + yOffset, state.playerWorldZ)
         
-        // 2. 進行方向（垂直軸回転）
+        // 2. 進行方向（ヘディング）
         val rotationDeg = -Math.toDegrees(state.playerWorldHeading.toDouble()).toFloat()
         Matrix.rotateM(modelMatrix, 0, rotationDeg, 0f, 1f, 0f)
 
-        // 3. 【修正】モデルの起き上がり補正（X軸回転）
-        // 奥から手前に90度持ち上げる回転を適用。
+        // 3. 起き上がり補正（X軸回転）
         if (isGltfModel) {
             Matrix.rotateM(modelMatrix, 0, -90f, 1f, 0f, 0f)
         }
 
-        // 4. スケーリング
-        Matrix.scaleM(modelMatrix, 0, specs.widthM, specs.heightM, specs.lengthM)
+        // 4. 【重要】比率を維持した全長スケーリング
+        // GltfLoader側で「最大辺=1.0」としてアスペクト比を維持したまま正規化されています。
+        // そのため、全長(lengthM)を全軸に均等に掛けることで、歪まずに正しいサイズになります。
+        val scale = specs.lengthM
+        Matrix.scaleM(modelMatrix, 0, scale, scale, scale)
         
         Matrix.multiplyMM(mvpMatrix, 0, vPMatrix, 0, modelMatrix, 0)
 
