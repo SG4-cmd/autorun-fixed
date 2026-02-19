@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<radio_stations>
+    <!-- CarCastはPMバンドの84.7MHz -->
+    <station
+        id="carcast_847"
+        name="CarCast 847"
+        band="PM"
+        frequency="84.7"
+        region="Special"
+        type="local"
+        resource_name="bgm" />
+</radio_stations>

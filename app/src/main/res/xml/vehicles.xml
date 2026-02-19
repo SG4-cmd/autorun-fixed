@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    vehicles.xml: 車両スペックデータベース
+
+    【各属性の説明】
+    - id: 車両の一意識別子
+    - name: ゲーム内に表示される名前
+    - image: res/drawable 内の画像ファイル名
+    - engineName: エンジンの型式・名称
+    - driveType: 駆動方式 (4WD, FR, FF, MR, RR)
+    - isRHD: 右ハンドルかどうか (true: 右, false: 左)
+    - seriesName: 車種シリーズ名
+    - modelGeneration: モデルの世代（数字）
+    - displacementCc: 総排気量 (cc)
+    - isDOHC: DOHCエンジンかどうか
+    - hasEFI: 電子制御燃料噴射かどうか
+    - hasTurbo: ターボチャージャー搭載かどうか
+    - turboBoostRpm: ターボが効き始める最低回転数
+    - turboBoostMultiplier: ターボによる最大トルク増幅率 (1.5 = 150%)
+    - weightKg: 車両重量 (kg)
+    - widthM: 車幅 (m)
+    - heightM: 車高/最低地上高補正 (m) - 影の描写に使用
+    - lengthM: 全長 (m) - 影の描写に使用
+    - maxPowerHp: カタログスペック馬力 (hp)
+    - maxTorqueNm: 最大トルク (Nm)
+    - torquePeakRPM: 最大トルクを発生する回転数
+    - gearRatios: ギア比 (0速, 1速, 2速...) ※カンマ区切り
+    - finalRatio: 最終減速比 (ファイナルギア)
+    - minRedzone: レッドゾーン（タコメーターの赤い領域）の開始回転数
+    - maxRedzone: レブリミット（回転数制限）
+    - tireDiameterM: タイヤの外径 (m) - 車速計算の基準
+    - tireWidthM: タイヤの幅 (m) - 描画に使用
+    - dragCd: 空気抵抗係数 (Cd値)
+    - frontalArea: 前面投影面積 (m2)
+    - centrifugalForceMultiplier: 遠心力の影響度 (低いほどよく曲がる)
+    - tireGripMultiplier: タイヤの基本グリップ力倍率
+-->
+<vehicles>
+    <!-- GT-R (BNR32): 4WDによる安定した加速と旋回性能 -->
+    <vehicle
+        id="A-1"
+        name="GT-R (BNR32)"
+        image="bnr32"
+        engineName="RB26DETT"
+        driveType="4WD"
+        isRHD="true"
+        seriesName="Skyline GT-R"
+        modelGeneration="32"
+        displacementCc="2568"
+        isDOHC="true"
+        hasEFI="true"
+        hasTurbo="true"
+        turboBoostRpm="3500"
+        turboBoostMultiplier="1.5"
+        weightKg="1430"
+        widthM="1.755"
+        heightM="0.145"
+        lengthM="4.545"
+        maxPowerHp="280"
+        maxTorqueNm="360"
+        torquePeakRPM="4400"
+        gearRatios="0,3.214,1.925,1.302,1.000,0.752"
+        finalRatio="4.111"
+        minRedzone="6500"
+        maxRedzone="8000"
+        tireDiameterM="0.631"
+        tireWidthM="0.225"
+        dragCd="0.40"
+        frontalArea="1.89"
+        centrifugalForceMultiplier="0.8"
+        tireGripMultiplier="1.0" />
+
+    <!-- Roadster (NA): 軽量で軽快なハンドリング。コーナーが速い -->
+    <vehicle
+        id="light_weight"
+        name="Roadster"
+        image="ic_launcher_foreground"
+        engineName="B6-ZE"
+        driveType="FR"
+        isRHD="true"
+        seriesName="Eunos Roadster"
+        modelGeneration="1"
+        displacementCc="1597"
+        isDOHC="true"
+        hasEFI="true"
+        hasTurbo="false"
+        turboBoostRpm="0"
+        turboBoostMultiplier="1.0"
+        weightKg="940"
+        widthM="1.675"
+        heightM="0.140"
+        lengthM="3.970"
+        maxPowerHp="120"
+        maxTorqueNm="140"
+        torquePeakRPM="5500"
+        gearRatios="0,3.136,1.888,1.330,1.000,0.814"
+        finalRatio="4.300"
+        minRedzone="7000"
+        maxRedzone="7500"
+        tireDiameterM="0.58"
+        tireWidthM="0.185"
+        dragCd="0.38"
+        frontalArea="1.70"
+        centrifugalForceMultiplier="0.5"
+        tireGripMultiplier="1.1" />
+
+    <!-- Charger: 圧倒的なパワーと重量。直線重視のマッスルカー -->
+    <vehicle
+        id="heavy_muscle"
+        name="Charger"
+        image="ic_launcher_foreground"
+        engineName="V8 HEMI"
+        driveType="FR"
+        isRHD="false"
+        seriesName="Dodge Charger"
+        modelGeneration="2"
+        displacementCc="6200"
+        isDOHC="false"
+        hasEFI="false"
+        hasTurbo="false"
+        turboBoostRpm="0"
+        turboBoostMultiplier="1.0"
+        weightKg="1800"
+        widthM="1.900"
+        heightM="0.160"
+        lengthM="5.280"
+        maxPowerHp="425"
+        maxTorqueNm="660"
+        torquePeakRPM="4800"
+        gearRatios="0,2.450,1.450,1.000,0.800,0.650"
+        finalRatio="3.070"
+        minRedzone="5500"
+        maxRedzone="6500"
+        tireDiameterM="0.73"
+        tireWidthM="0.245"
+        dragCd="0.45"
+        frontalArea="2.20"
+        centrifugalForceMultiplier="1.6"
+        tireGripMultiplier="0.9" />
+</vehicles>

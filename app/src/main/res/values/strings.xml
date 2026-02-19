@@ -1,0 +1,192 @@
+<resources>
+    <string name="app_name">autorun</string>
+
+    <!-- ======================================================================================
+         GameSettings: 基本的なゲーム物理と環境設定
+         ====================================================================================== -->
+
+    <!-- 物理挙動 -->
+    <string name="accel">1.2</string>
+    <string name="braking_power">15.0</string>
+    <string name="coasting_decel">0.2</string>
+    <string name="off_road_decel">1.0</string>
+    <string name="centrifugal_force">0.25</string>
+    <string name="centrifugal_response">6.0</string>
+    <string name="centrifugal_speed_coeff">0.4</string>
+    <string name="bank_coeff">0.5</string>
+    <string name="base_grip_limit">0.12</string>
+    <string name="slide_coeff">3.5</string>
+
+    <string name="steer_max_angle">135.0</string>
+    <string name="steer_lateral_coeff">3.0</string>
+    <string name="steer_speed_scaling">10.0</string>
+
+    <string name="segment_length">1.0</string>
+    <string name="road_width">7.0</string>
+    <string name="single_lane_width">3.5</string>
+    <string name="median_width">0.5</string>
+    <string name="shoulder_width_left">2.5</string>
+    <string name="shoulder_width_right">1.0</string>
+    <string name="lane_marker_width">0.2</string>
+    <string name="draw_distance">1000</string>
+    <string name="camera_height">1.5</string>
+
+    <string name="sun_real_diameter_km">1392700.0</string>
+    <string name="sun_distance_km">149600000.0</string>
+    <string name="sun_visual_exaggeration">15.0</string>
+    <string name="sun_world_heading">0.7853982</string>
+
+    <string name="show_shadows">true</string>
+    <string name="shadow_offset_cm">-5.0</string>
+    <string name="shadow_width_ratio">1.2</string>
+    <string name="shadow_length_ratio">1.0</string>
+    <string name="shadow_blur_radius">20.0</string>
+    <string name="shadow_corner_radius">15.0</string>
+    <string name="shadow_trapezoid_ratio">0.7</string>
+    <string name="car_gloss_alpha">100</string>
+    <string name="car_gloss_blur">25.0</string>
+
+    <string name="steer_wheel_alpha">204</string>
+    <string name="steer_wheel_thickness">80.0</string>
+
+    <string name="wheel_height_offset">3.0</string>
+    <string name="wheel_x_offset">47.0</string>
+
+    <!-- レイアウト相対座標 (割合: 0.0 - 1.0) -->
+    <string name="ui_pos_status">0.013,0.018</string>
+    <string name="ui_pos_map">0.010,0.227</string>
+    <string name="ui_pos_settings">0.354,0.023</string>
+    <string name="ui_pos_compass">0.406,0.023</string>
+    <string name="ui_pos_boost">0.711,0.023</string>
+    <string name="ui_pos_rpm">0.781,0.014</string>
+    <string name="ui_pos_speed">0.870,0.009</string>
+    <string name="ui_pos_throttle">0.958,0.463</string>
+    <string name="ui_pos_brake">0.635,0.768</string>
+    <string name="ui_pos_steer">0.167,0.972</string>
+
+    <!-- UI倍率 -->
+    <string name="ui_scale_status">0.85</string>
+    <string name="ui_scale_map">0.8</string>
+    <string name="ui_scale_settings">1.0</string>
+    <string name="ui_scale_compass">1.0</string>
+    <string name="ui_scale_rpm">0.65</string>
+    <string name="ui_scale_speed">0.85</string>
+    <string name="ui_scale_boost">0.6</string>
+    <string name="ui_scale_brake">1.0</string>
+    <string name="ui_scale_throttle">1.0</string>
+    <string name="ui_scale_steer">1.0</string>
+
+    <string name="ui_alpha_default">0.8</string>
+
+    <string name="guardrail_height">0.85</string>
+    <string name="guardrail_plate_height">0.35</string>
+    <string name="guardrail_post_diameter">0.1398</string>
+    <string name="guardrail_post_interval">2.0</string>
+    <string name="guardrail_sleeve_width">0.5</string>
+
+    <string name="reflector_interval">50.0</string>
+    <string name="reflector_diameter">0.1</string>
+    <string name="color_reflector">#FFCC00</string>
+
+    <string name="lane_dash_length">8</string>
+    <string name="lane_gap_length">12</string>
+
+    <string name="fov">600.0</string>
+    <string name="road_stretch">2.0</string>
+    <string name="resolutions">480,1080,2160</string>
+    <string name="resolution_index">1</string>
+    <string name="rumble_length">3</string>
+
+    <string name="color_sky">#87CEEB</string>
+    <string name="color_grass_dark">#228B22</string>
+    <string name="color_grass_light">#32CD32</string>
+    <string name="color_road_dark">#444444</string>
+    <string name="color_road_light">#4C4C4C</string>
+    <string name="color_lane">#FFFFFF</string>
+    <string name="color_guardrail_plate">#FFFFFF</string>
+    <string name="color_guardrail_post">#CCCCCC</string>
+
+    <!-- DeveloperSettings -->
+    <string name="show_right_guardrail">true</string>
+    <string name="show_guardrail_posts">true</string>
+
+    <!-- UI詳細 -->
+    <string name="status_box_width">380.0</string>
+    <string name="status_box_height">650.0</string>
+    <string name="status_text_size">32.0</string>
+    <string name="status_box_alpha">160</string>
+    <string name="status_box_color">#000000</string>
+    <string name="status_text_color">#FFFFFF</string>
+    <string name="fps_text_color">#FFFF00</string>
+    <string name="torque_text_color">#00FFFF</string>
+
+    <string name="speedo_radius">180.0</string>
+    <string name="rpmo_radius">144.0</string>
+    <string name="boost_radius">90.0</string>
+
+    <string name="speedo_max_value">320.0</string>
+    <string name="rpmo_max_value">10000.0</string>
+    <string name="boost_max_value">2.0</string>
+
+    <string name="gauge_dial_color">#000000</string>
+    <string name="gauge_needle_color">#FF0000</string>
+    <string name="gauge_text_color">#FFFFFF</string>
+    <string name="boost_text_color">#00FFFF</string>
+
+    <string name="button_alpha_pressed">220</string>
+    <string name="button_alpha_normal">140</string>
+    <string name="button_corner_radius">20.0</string>
+    <string name="color_btn_default">#444444</string>
+    <string name="color_btn_accel">#00FF00</string>
+    <string name="color_btn_brake">#FF0000</string>
+    <string name="color_btn_text">#FFFFFF</string>
+
+    <string name="nav_size">450.0</string>
+    <string name="nav_alpha">160</string>
+    <string name="nav_road_color">#FFFFFF</string>
+    <string name="nav_player_color">#FF0000</string>
+    <string name="nav_zoom">0.5</string>
+
+    <string name="log_width">400.0</string>
+    <string name="log_height">150.0</string>
+    <string name="log_line_color">#00FF00</string>
+    <string name="log_marker_color">#FF0000</string>
+    <string name="curve_percent_max">100.0</string>
+
+    <string name="road_quality">4000</string>
+    <string name="mountain_count">3</string>
+    <string name="cloud_count">4</string>
+    <string name="log_interval_meters">20.0</string>
+    <string name="physics_dt">0.016666667</string>
+
+    <string name="course_seed">12345</string>
+    <string name="course_section_count">5000</string>
+    <string name="course_min_length">100.0</string>
+    <string name="course_max_slope">0.05</string>
+    <string name="course_max_curve">0.0025</string>
+    <string name="course_straight_prob">0.3</string>
+
+    <string name="bg_mountain_image">oou_sanmyaku</string>
+    <string name="bg_parallax_scroll_factor">200.0</string>
+    <string name="bg_sun_y_ratio">0.25</string>
+    <string name="bg_sun_glow_alpha">#CCFFFFFF</string>
+    <string name="bg_sun_glow_radius_ratio">4.0</string>
+
+    <string name="color_concrete">#999999</string>
+    <string name="phys_idle_rpm">800.0</string>
+    <string name="phys_engine_inertia">0.14</string>
+    <string name="phys_clutch_rigidity">25.0</string>
+    <string name="phys_rolling_resist_coeff">0.012</string>
+    <string name="phys_air_density">1.225</string>
+    <string name="phys_gravity">9.8</string>
+
+    <string name="color_throttle_high">#888800</string>
+    <string name="color_throttle_low">#880000</string>
+    <string name="ui_settings_menu_alpha">240</string>
+    <string name="ui_settings_btn_alpha">180</string>
+
+    <string name="color_shadow">#99000000</string>
+    <string name="shadow_darken_alpha">4</string>
+    <string name="shadow_blur_scaling">0.8</string>
+    <string name="shadow_length_factor">0.8</string>
+</resources>

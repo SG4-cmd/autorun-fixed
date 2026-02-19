@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ゲームの物理・描画などの初期設定値 -->
+
+    <!-- サウンド -->
+    <string name="engine_sound_volume">1.0</string>
+    <string name="music_volume">1.0</string>
+
+    <!-- 物理エンジン -->
+    <string name="accel">1.2</string>
+    <string name="braking_power">15.0</string>
+    <string name="coasting_decel">0.2</string>
+    <string name="off_road_decel">1.0</string>
+    <string name="centrifugal_force">0.25</string>
+    <string name="centrifugal_response">6.0</string>
+    <string name="centrifugal_speed_coeff">0.4</string>
+    <string name="bank_coeff">0.5</string>
+    <string name="base_grip_limit">0.12</string>
+    <string name="slide_coeff">3.5</string>
+
+    <!-- ステアリング -->
+    <string name="steer_max_angle">135</string>
+    <string name="steer_lateral_coeff">3.0</string>
+    <string name="steer_speed_scaling">10</string>
+
+    <!-- 描画 -->
+    <string name="segment_length">1.0</string>
+    <string name="road_width">7.0</string>
+    <string name="single_lane_width">3.5</string>
+    <string name="median_width">0.5</string>
+    <string name="shoulder_width_left">2.5</string>
+    <string name="shoulder_width_right">1.0</string>
+    <string name="lane_marker_width">0.2</string>
+    <string name="draw_distance">1000</string>
+    <string name="camera_height">1.5</string>
+    <string name="sun_visual_exaggeration">15.0</string>
+    <string name="sun_world_heading">0.785</string>
+
+</resources>

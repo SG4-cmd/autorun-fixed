@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<course name="東北自動車道 下り" total_length_km="679.5">
+    <sections>
+        <!-- 浦和IC付近 (起点) -->
+        <section type="STRAIGHT" length_m="5000" lanes="3" curve="0.0" slope="0.001" />
+        <!-- 岩槻〜久喜 (平地・直線メイン) -->
+        <section type="CURVE" length_m="10000" lanes="3" curve="0.0002" slope="0.0" />
+        <section type="STRAIGHT" length_m="20000" lanes="3" curve="0.0" slope="0.0" />
+        <!-- 羽生〜館林 (利根川付近) -->
+        <section type="STRAIGHT" length_m="15000" lanes="3" curve="0.0" slope="0.0" />
+        <!-- 栃木県内 (徐々に起伏) -->
+        <section type="UP" length_m="8000" lanes="3" curve="0.0001" slope="0.015" />
+        <!-- 宇都宮〜矢板 (車線減少想定) -->
+        <section type="STRAIGHT" length_m="15000" lanes="2" curve="0.0" slope="0.0" />
+        <!-- 那須高原付近 (登り坂・カーブ) -->
+        <section type="UP_CURVE" length_m="12000" lanes="2" curve="0.0008" slope="0.03" />
+        <section type="DOWN" length_m="10000" lanes="2" curve="0.0005" slope="-0.02" />
+        <!-- 福島県内 (起伏の激しい区間) -->
+        <section type="CURVE" length_m="15000" lanes="2" curve="0.0012" slope="0.01" />
+        <section type="STRAIGHT" length_m="25000" lanes="2" curve="0.0" slope="0.0" />
+        <!-- 宮城県内 (仙台付近) -->
+        <section type="STRAIGHT" length_m="30000" lanes="2" curve="0.0" slope="0.0" />
+        <!-- 岩手〜青森 (さらに起伏) -->
+        <section type="UP" length_m="20000" lanes="2" curve="0.0003" slope="0.02" />
+        <!-- 終点 青森IC -->
+        <section type="STRAIGHT" length_m="10000" lanes="2" curve="0.0" slope="0.0" />
+    </sections>
+    <objects>
+        <object type="JCT" pos_km="0.0" label="川口JCT" />
+        <object type="TB" pos_km="3.2" label="浦和IC/TB" />
+        <object type="SA" pos_km="14.5" label="蓮田SA" />
+        <object type="IC" pos_km="24.1" label="久喜IC" />
+        <object type="JCT" pos_km="27.2" label="久喜白岡JCT" />
+        <object type="PA" pos_km="34.8" label="羽生PA" />
+        <object type="IC" pos_km="39.2" label="館林IC" />
+        <object type="IC" pos_km="49.0" label="佐野藤岡IC" />
+        <object type="SA" pos_km="53.1" label="佐野SA" />
+        <object type="JCT" pos_km="54.0" label="岩舟JCT" />
+        <object type="JCT" pos_km="63.0" label="栃木都賀JCT" />
+        <object type="PA" pos_km="67.5" label="都賀PA" />
+        <object type="IC" pos_km="72.7" label="鹿沼IC" />
+        <object type="PA" pos_km="80.8" label="大谷PA" />
+        <object type="IC" pos_km="84.7" label="宇都宮IC" />
+        <object type="SA" pos_km="94.8" label="上河内SA" />
+        <object type="IC" pos_km="103.0" label="矢板IC" />
+        <object type="PA" pos_km="108.7" label="矢板北PA" />
+        <object type="IC" pos_km="115.5" label="西那須野塩原IC" />
+        <object type="SA" pos_km="138.6" label="那須高原SA" />
+        <object type="IC" pos_km="150.0" label="白河IC" />
+        <object type="PA" pos_km="160.2" label="阿武隈PA" />
+        <object type="PA" pos_km="169.7" label="鏡石PA" />
+        <object type="IC" pos_km="174.3" label="須賀川IC" />
+        <object type="JCT" pos_km="181.4" label="郡山JCT" />
+        <object type="PA" pos_km="185.1" label="安積PA" />
+        <object type="SA" pos_km="191.4" label="安達太良SA" />
+        <object type="IC" pos_km="198.7" label="二本松IC" />
+        <object type="PA" pos_km="205.7" label="福島松川PA" />
+        <object type="JCT" pos_km="215.0" label="福島JCT" />
+        <object type="PA" pos_km="215.8" label="吾妻PA" />
+        <object type="IC" pos_km="220.2" label="福島飯坂IC" />
+        <object type="SA" pos_km="230.5" label="国見SA" />
+        <object type="IC" pos_km="243.5" label="白石IC" />
+        <object type="PA" pos_km="246.5" label="越河PA" />
+        <object type="PA" pos_km="255.4" label="蔵王PA" />
+        <object type="JCT" pos_km="258.9" label="村田JCT" />
+        <object type="PA" pos_km="265.1" label="菅生PA" />
+        <object type="IC" pos_km="270.4" label="仙台南IC" />
+        <object type="IC" pos_km="279.3" label="仙台宮城IC" />
+        <object type="IC" pos_km="288.4" label="泉IC" />
+        <object type="PA" pos_km="290.4" label="泉PA" />
+        <object type="JCT" pos_km="294.0" label="富谷JCT" />
+        <object type="PA" pos_km="299.5" label="鶴巣PA" />
+        <object type="IC" pos_km="303.4" label="大衡IC" />
+        <object type="PA" pos_km="313.7" label="三本木PA" />
+        <object type="IC" pos_km="320.3" label="古川IC" />
+        <object type="SA" pos_km="325.0" label="長者原SA" />
+        <object type="IC" pos_km="335.5" label="築館IC" />
+        <object type="PA" pos_km="340.5" label="志波姫PA" />
+        <object type="IC" pos_km="348.4" label="若柳金成IC" />
+        <object type="PA" pos_km="352.0" label="金成PA" />
+        <object type="IC" pos_km="363.3" label="一関IC" />
+        <object type="PA" pos_km="369.3" label="中尊寺PA" />
+        <object type="SA" pos_km="375.0" label="前沢SA" />
+        <object type="IC" pos_km="385.0" label="水沢IC" />
+        <object type="JCT" pos_km="393.1" label="北上JCT" />
+        <object type="IC" pos_km="393.7" label="北上金ヶ崎IC" />
+        <object type="IC" pos_km="406.5" label="花巻IC" />
+        <object type="JCT" pos_km="409.5" label="花巻JCT" />
+        <object type="SA" pos_km="420.4" label="紫波SA" />
+        <object type="PA" pos_km="427.0" label="矢巾PA" />
+        <object type="IC" pos_km="436.7" label="盛岡IC" />
+        <object type="IC" pos_km="442.2" label="滝沢IC" />
+        <object type="PA" pos_km="445.4" label="滝沢PA" />
+        <object type="IC" pos_km="454.4" label="西根IC" />
+        <object type="SA" pos_km="462.2" label="岩手山SA" />
+        <object type="IC" pos_km="471.0" label="松尾八幡平IC" />
+        <object type="PA" pos_km="476.1" label="前森山PA" />
+        <object type="PA" pos_km="485.4" label="畑PA" />
+        <object type="IC" pos_km="491.5" label="安代IC" />
+        <object type="JCT" pos_km="493.1" label="安代JCT" />
+        <object type="PA" pos_km="505.7" label="田山PA" />
+        <object type="PA" pos_km="513.2" label="湯瀬PA" />
+        <object type="IC" pos_km="518.5" label="鹿角八幡平IC" />
+        <object type="SA" pos_km="522.7" label="花輪SA" />
+        <object type="IC" pos_km="530.0" label="十和田IC" />
+        <object type="IC" pos_km="541.3" label="小坂IC" />
+        <object type="JCT" pos_km="542.4" label="小坂JCT" />
+        <object type="TUNNEL" pos_km="550.0" length_m="4000" label="坂梨トンネル" />
+        <object type="IC" pos_km="557.3" label="碇ヶ関IC" />
+        <object type="PA" pos_km="562.1" label="阿闍羅PA" />
+        <object type="IC" pos_km="567.2" label="大鰐弘前IC" />
+        <object type="SA" pos_km="572.7" label="津軽SA" />
+        <object type="IC" pos_km="576.2" label="黒石IC" />
+        <object type="PA" pos_km="585.2" label="高舘PA" />
+        <object type="IC" pos_km="588.9" label="浪岡IC" />
+        <object type="JCT" pos_km="674.4" label="青森JCT" />
+        <object type="IC" pos_km="679.5" label="青森IC" />
+    </objects>
+</course>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    game_rules.xml: ゲームの基本ルール設定
+-->
+<rules>
+    <!-- タイムアタックモードの時間制限 (秒) -->
+    <time_attack limit_seconds="300" />
+
+    <!-- ライバルカーの出現設定 -->
+    <rivals>
+        <rival vehicle_id="A-1" appearance_ratio="0.3" skill_level="0.8" />
+        <rival vehicle_id="light_weight" appearance_ratio="0.5" skill_level="0.6" />
+        <rival vehicle_id="heavy_muscle" appearance_ratio="0.2" skill_level="0.9" />
+    </rivals>
+</rules>
