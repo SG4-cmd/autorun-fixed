@@ -68,25 +68,16 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         calculateFps(state)
         checkDeveloperModeActivation(state)
 
-        // HDUを描画 (UI FPS, エンジン音, 音楽プレーヤーを渡す)
-        // 以前は GesoEngine.drawAll を呼んでいましたが、UIのみを担当する HDU.draw に一本化しました。
         HDU.draw(canvas, w, h, state, currentFps, font7Bar, fontWarrior, fontWarrior, engineSound, musicPlayer, context)
-        
-        // 描画ループを継続
         invalidate()
     }
 
-    /**
-     * スピードメーターとタコメーターの同時長押しを判定します。
-     */
     private fun checkDeveloperModeActivation(state: GameState) {
         if (isSpeedometerTouching && isTachometerTouching) {
             if (dualTouchStartTime == 0L) {
                 dualTouchStartTime = System.currentTimeMillis()
             } else if (System.currentTimeMillis() - dualTouchStartTime > 1000) {
-                // 1秒以上経過でトグル
                 state.isDeveloperMode = !state.isDeveloperMode
-                // 連続発動を防ぐためにリセット
                 isSpeedometerTouching = false
                 isTachometerTouching = false
                 dualTouchStartTime = 0L
@@ -96,9 +87,6 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         }
     }
 
-    /**
-     * UI(Canvas)の描画フレームレートを計測します。
-     */
     private fun calculateFps(state: GameState) {
         val now = System.currentTimeMillis()
         if (lastFpsUpdateTime == 0L) {
@@ -123,23 +111,20 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         val y = event.getY(actionIndex)
         val pointerId = event.getPointerId(actionIndex)
 
-        // GesoEngine.handleTouch による古いタッチ処理を HDU 側に寄せて整理
+        // GesoEngine3Dに一本化したタッチ判定を優先
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
-             if (HDU.handleSettingsTouch(x, y, state)) return true
+             if (GesoEngine3D.handleTouch(x, y, state, true)) return true
         }
 
         when (action) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-                // メーターへのタッチ判定
                 if (HDU.speedRect.contains(x, y)) isSpeedometerTouching = true
                 if (HDU.rpmRect.contains(x, y)) isTachometerTouching = true
 
-                // ナビUIのボタン判定を優先
                 if (HDUMap.handleTouch(x, y, state, false, context, musicPlayer)) {
                     return true
                 }
 
-                // カメラ操作UI判定
                 when {
                     HDU.camUpRect.contains(x, y) -> state.activeCameraDirs.add(0)
                     HDU.camDownRect.contains(x, y) -> state.activeCameraDirs.add(1)
@@ -156,17 +141,14 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                // メーターからの離脱判定
                 if (HDU.speedRect.contains(x, y)) isSpeedometerTouching = false
                 if (HDU.rpmRect.contains(x, y)) isTachometerTouching = false
                 
-                // 全ての指が離れた場合はリセット
                 if (event.pointerCount <= 1) {
                     isSpeedometerTouching = false
                     isTachometerTouching = false
                 }
 
-                // ナビUIのタップ確定処理
                 if (action != MotionEvent.ACTION_CANCEL) {
                     if (HDUMap.handleTouch(x, y, state, true, context, musicPlayer)) {
                         cleanUpPointer(pointerId)
@@ -227,7 +209,7 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
     }
 
     private fun handleDrivingInput(event: MotionEvent, state: GameState) {
-        var sInput = 0f; var tInput = 0f; var br = false
+        var sInput = 0f; var tInput = 0f
         var isSteeringActive = false; var isThrottleActive = false
         for (i in 0 until event.pointerCount) {
             val id = event.getPointerId(i)
@@ -243,11 +225,16 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                 tInput = ((throttleStartPosY[id]!! - ty) / (height / 8f)).coerceIn(0f, 1f)
                 isThrottleActive = true
             }
-            if (HDU.brakeRect.contains(tx, ty)) br = true
+            if (HDU.brakeRect.contains(tx, ty)) state.isBraking = true
         }
         state.rawSteeringInput = if (isSteeringActive) sInput else 0f
         state.rawThrottleInput = if (isThrottleActive) tInput else 0f
-        state.isBraking = br
+        // ブレーキ判定の修正：ループ内でリセットしないように注意
+        var anyBrake = false
+        for (i in 0 until event.pointerCount) {
+            if (HDU.brakeRect.contains(event.getX(i), event.getY(i))) anyBrake = true
+        }
+        state.isBraking = anyBrake
     }
     
     override fun performClick(): Boolean {

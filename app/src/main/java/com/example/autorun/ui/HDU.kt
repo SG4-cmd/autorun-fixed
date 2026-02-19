@@ -180,4 +180,27 @@ object HDU {
     fun handleSettingsTouch(x: Float, y: Float, state: GameState): Boolean {
         return HDUSettings.handleSettingsTouch(x, y, state)
     }
+
+    /**
+     * UI全体のタッチ判定を集約
+     */
+    fun handleTouch(x: Float, y: Float, state: GameState, isTapEvent: Boolean): Boolean {
+        if (state.isSettingsOpen) {
+            return handleSettingsTouch(x, y, state)
+        }
+        
+        // ミニマップの切り替え
+        if (mapRect.contains(x, y) && isTapEvent) {
+            state.isMapLongRange = !state.isMapLongRange
+            return true
+        }
+
+        // 設定ボタン
+        if (settingsVisualRect.contains(x, y) && isTapEvent) {
+            state.isSettingsOpen = true
+            return true
+        }
+        
+        return false
+    }
 }
