@@ -8,7 +8,7 @@ import kotlin.math.*
 
 /**
  * 【RoadGeometry】
- * 3D投影エンジン。
+ * 3D投影エンジン。自車の後方も含めて座標変換を行う。
  */
 object RoadGeometry {
     const val MAX_SAMPLES = 4000
@@ -43,85 +43,88 @@ object RoadGeometry {
         val camX = state.playerWorldX
         val camZ = state.playerWorldZ
         val camY = state.playerWorldY + GameSettings.CAMERA_HEIGHT
-        
-        // 修正：カメラの向きに対して逆方向に回転させて投影する (World to Camera transform)
         val camH = state.playerWorldHeading
+        
         val cosCam = cos(camH.toDouble()).toFloat()
         val sinCam = sin(camH.toDouble()).toFloat()
+        val cosP = cos(state.cameraPitch.toDouble()).toFloat()
+        val sinP = sin(state.cameraPitch.toDouble()).toFloat()
 
         var sampleCount = 0
-        var currentZOffset = 0f
+        var currentRelDist = -20f // 自車より20m手前からサンプリング開始
 
         val oppOffsetM = roadW + (GameSettings.SHOULDER_WIDTH_RIGHT * 2f) + GameSettings.MEDIAN_WIDTH
 
-        while (currentZOffset < GameSettings.DRAW_DISTANCE && sampleCount < maxSamples) {
+        while (currentRelDist < GameSettings.DRAW_DISTANCE && sampleCount < maxSamples) {
             val dz = when {
-                currentZOffset < 50f -> 0.5f
-                currentZOffset < 200f -> 1.5f
-                else -> (currentZOffset / 100f).coerceIn(2.0f, 15.0f)
+                currentRelDist < 20f -> 0.5f
+                currentRelDist < 100f -> 1.5f
+                else -> (currentRelDist / 100f).coerceIn(2.0f, 15.0f)
             }
             
-            val segmentIdx = (playerDist + currentZOffset) / segLen
-            if (segmentIdx >= CourseManager.getTotalSegments()) break
+            val segmentIdx = (playerDist + currentRelDist) / segLen
+            if (segmentIdx >= CourseManager.getTotalSegments() || segmentIdx < 0) {
+                currentRelDist += dz
+                continue
+            }
 
             val rWorldX = CourseManager.getRoadWorldX(segmentIdx)
             val rWorldZ = CourseManager.getRoadWorldZ(segmentIdx)
             val rWorldY = CourseManager.getHeight(segmentIdx)
             val rH = CourseManager.getRoadWorldHeading(segmentIdx)
 
-            val dx = rWorldX - camX
-            val dz_ = rWorldZ - camZ
-
-            // 修正：回転行列の適用 (Heading方向の正文化)
-            // rx = dx * cos(H) - dz * sin(H)
-            // rz = dx * sin(H) + dz * cos(H)
-            val rxCenter = dx * cosCam - dz_ * sinCam
-            val rzCenter = dx * sinCam + dz_ * cosCam
+            // プロジェクション計算 (関数化せずにインラインまたはフラグで制御)
+            val dxCenter = rWorldX - camX
+            val dzCenter = rWorldZ - camZ
+            val dyCenter = rWorldY - camY
+            
+            val rxCenter = dxCenter * cosCam - dzCenter * sinCam
+            val rzTmpCenter = dxCenter * sinCam + dzCenter * cosCam
+            val ryCenter = dyCenter * cosP - rzTmpCenter * sinP
+            val rzCenter = dyCenter * sinP + rzTmpCenter * cosP
             
             if (rzCenter <= 1.0f) {
-                currentZOffset += dz
+                currentRelDist += dz
                 continue
             }
 
-            val scale = fov / rzCenter
-            val screenY = horizon - (rWorldY - camY) * scale
-            
-            // 道路の横方向ベクトル
+            val scaleCenter = fov / rzCenter
+            centerX[sampleCount] = (w * 0.5f) + rxCenter * scaleCenter * stretch
+            yCoords[sampleCount] = horizon - ryCenter * scaleCenter
+            zCoords[sampleCount] = currentRelDist
+
             val perpX = cos(rH.toDouble()).toFloat()
             val perpZ = -sin(rH.toDouble()).toFloat()
-
-            centerX[sampleCount] = (w * 0.5f) + rxCenter * scale * stretch
-            yCoords[sampleCount] = screenY
-            zCoords[sampleCount] = currentZOffset
-
             val halfW = roadW * 0.5f
             val lineW = GameSettings.LANE_MARKER_WIDTH
             val sL = GameSettings.SHOULDER_WIDTH_LEFT
             val sR = GameSettings.SHOULDER_WIDTH_RIGHT
 
-            fun getX(offsetX: Float): Float {
-                val vx = rWorldX + perpX * offsetX
-                val vz = rWorldZ + perpZ * offsetX
-                val dxv = vx - camX
-                val dzv = vz - camZ
-                val rxv = dxv * cosCam - dzv * sinCam
-                val rzv = dxv * sinCam + dzv * cosCam
-                return if (rzv > 1.0f) (w * 0.5f) + rxv * (fov / rzv) * stretch else centerX[sampleCount]
+            fun projectX(offsetX: Float): Float {
+                val wx = rWorldX + perpX * offsetX
+                val wz = rWorldZ + perpZ * offsetX
+                val dx = wx - camX
+                val dz = wz - camZ
+                val rx = dx * cosCam - dz * sinCam
+                val rzTmp = dx * sinCam + dz * cosCam
+                // Y軸回転(Pitch)の影響も考慮したRZでスケールを出す
+                val rz = (rWorldY - camY) * sinP + rzTmp * cosP
+                return if (rz > 1.0f) (w * 0.5f) + rx * (fov / rz) * stretch else centerX[sampleCount]
             }
 
-            leftInnerX[sampleCount] = getX(-halfW)
-            rightInnerX[sampleCount] = getX(halfW)
-            leftOuterX[sampleCount] = getX(-halfW - lineW)
-            rightOuterX[sampleCount] = getX(halfW + lineW)
-            leftShoulderX[sampleCount] = getX(-halfW - lineW - sL)
-            rightShoulderX[sampleCount] = getX(halfW + lineW + sR)
+            leftInnerX[sampleCount] = projectX(-halfW)
+            rightInnerX[sampleCount] = projectX(halfW)
+            leftOuterX[sampleCount] = projectX(-halfW - lineW)
+            rightOuterX[sampleCount] = projectX(halfW + lineW)
+            leftShoulderX[sampleCount] = projectX(-halfW - lineW - sL)
+            rightShoulderX[sampleCount] = projectX(halfW + lineW + sR)
 
-            oppCenterX[sampleCount] = getX(oppOffsetM)
-            oppLeftShoulderX[sampleCount] = getX(oppOffsetM - halfW - lineW - sR)
-            oppRightShoulderX[sampleCount] = getX(oppOffsetM + halfW + lineW + sL)
+            oppCenterX[sampleCount] = projectX(oppOffsetM)
+            oppLeftShoulderX[sampleCount] = projectX(oppOffsetM - halfW - lineW - sR)
+            oppRightShoulderX[sampleCount] = projectX(oppOffsetM + halfW + lineW + sL)
 
             sampleCount++
-            currentZOffset += dz
+            currentRelDist += dz
         }
         currentSampleCount = sampleCount
         return sampleCount
