@@ -24,6 +24,7 @@ import com.example.autorun.data.vehicle.VehicleSpecs
 
 /**
  * 【GameGraphics: グラフィック描画の中枢】
+ * 車両の描画（ステアリング連動タイヤ含む）と全体レイアウトを管理。
  */
 object GameGraphics {
 
@@ -32,7 +33,6 @@ object GameGraphics {
 
     private object DrawingConstants {
         const val PLAYER_CAR_Y_ANCHOR = 0.92f
-        const val ROAD_WIDTH_SCREEN_RATIO = 0.35f
         const val WHEEL_HEIGHT_TO_CAR_HEIGHT_RATIO = 0.35f
         const val WHEEL_Y_OFFSET_TO_CAR_HEIGHT_RATIO = 0.65f
         const val WHEEL_X_OFFSET_RATIO = 0.15f
@@ -51,10 +51,7 @@ object GameGraphics {
     private val opponentDstRect = RectF()
 
     private var playerBitmap: Bitmap? = null
-    private var scaledPlayerBitmap: Bitmap? = null
     private var lastLoadedResId: Int = -1
-    private var lastScaledWidth: Int = -1
-    private var lastScaledHeight: Int = -1
 
     init {
         guardrailToggleArea.set(developerModeTouchArea.left, developerModeTouchArea.top, developerModeTouchArea.right, developerModeTouchArea.centerY())
@@ -64,9 +61,8 @@ object GameGraphics {
     private fun loadResources(context: Context) {
         val specs = VehicleDatabase.getSelectedVehicle()
         if (specs.imageResId != lastLoadedResId || playerBitmap == null) {
-            playerBitmap?.recycle(); scaledPlayerBitmap?.recycle()
             playerBitmap = BitmapFactory.decodeResource(context.resources, specs.imageResId)
-            scaledPlayerBitmap = null; lastLoadedResId = specs.imageResId
+            lastLoadedResId = specs.imageResId
         }
         BackgroundRenderer.loadResources(context)
     }
@@ -81,13 +77,16 @@ object GameGraphics {
         val segLen = GameSettings.SEGMENT_LENGTH
         val slope = CourseManager.getCurrentAngle(playerDist / segLen)
         val horizon = h * 0.5f + (slope * 10f)
+        
         BackgroundRenderer.draw(canvas, w, h, horizon, state)
+        
         val specs = VehicleDatabase.getSelectedVehicle()
         if (playerBitmap != null) {
             val targetCarScreenWidth = w * DrawingConstants.CAR_SIZE_SCREEN_RATIO
             val pixelsPerMeter = targetCarScreenWidth / specs.widthM
             GameSettings.ROAD_STRETCH = (pixelsPerMeter * GameSettings.ROAD_WIDTH) / (w * 0.5f)
         }
+        
         RoadRenderer.draw(canvas, w, h, state, horizon)
         drawOpponentCars(canvas, w, h, state, specs)
         drawPlayer(canvas, w, h, state, specs, horizon)
@@ -102,7 +101,7 @@ object GameGraphics {
             if (relativeZ <= 0.1f || relativeZ > GameSettings.DRAW_DISTANCE) continue
             val p = RoadGeometry.interpolate(relativeZ) ?: continue
             val scale = fov / (relativeZ + 0.1f); val carW = scale * specs.widthM * stretch; val carH = carW * (bitmap.height.toFloat() / bitmap.width.toFloat())
-            val carX = (p.lx + p.rx) / 2f + (car.laneOffset * scale * stretch) - (carW / 2f); val carY = p.y - carH
+            val carX = p.centerX + (car.laneOffset * scale * stretch) - (carW / 2f); val carY = p.y - carH
             opponentDstRect.set(carX, carY, carX + carW, carY + carH)
             mainPaint.alpha = ((1.0f - (relativeZ / GameSettings.DRAW_DISTANCE)) * 255).toInt().coerceIn(0, 255)
             canvas.drawBitmap(bitmap, null, opponentDstRect, mainPaint)
@@ -112,45 +111,57 @@ object GameGraphics {
 
     private fun drawPlayer(canvas: Canvas, w: Float, h: Float, state: GameState, specs: VehicleSpecs, horizon: Float) {
         val pixelsPerMeter = (w * 0.5f * GameSettings.ROAD_STRETCH) / GameSettings.ROAD_WIDTH
-        val carW = pixelsPerMeter * specs.widthM; val original = playerBitmap
+        val carW = pixelsPerMeter * specs.widthM
+        val original = playerBitmap
         val carH = original?.let { carW * (it.height.toFloat() / it.width.toFloat()) } ?: (carW * 0.4f)
-        val carX = w / 2 - carW / 2; val carBaseY = h * DrawingConstants.PLAYER_CAR_Y_ANCHOR - carH
+        
+        val carX = w / 2 - carW / 2
+        val carBaseY = h * DrawingConstants.PLAYER_CAR_Y_ANCHOR - carH
         val carBodyY = carBaseY + state.carVerticalShake + state.visualPitch
-        val sunRelHeading = GameSettings.SUN_WORLD_HEADING - state.playerHeading
+        val sunRelHeading = GameSettings.SUN_WORLD_HEADING - state.playerWorldHeading
         
         ShadowRenderer.drawCarShadow(canvas, playerBitmap, carX, carBaseY, carW, carH, sunRelHeading, specs.heightM, specs.lengthM, pixelsPerMeter)
         
         canvas.save()
         canvas.rotate(state.visualTilt + state.roadShake, carX + carW / 2, carBaseY + carH / 2)
         
-        // ホイールの描画
-        val wheelW = pixelsPerMeter * specs.tireWidthM; val wheelH = carH * DrawingConstants.WHEEL_HEIGHT_TO_CAR_HEIGHT_RATIO
+        // --- タイヤ（ホイール）の描画 ---
+        val wheelW = pixelsPerMeter * specs.tireWidthM
+        val wheelH = carH * DrawingConstants.WHEEL_HEIGHT_TO_CAR_HEIGHT_RATIO
         val wheelY = carBaseY + carH * DrawingConstants.WHEEL_Y_OFFSET_TO_CAR_HEIGHT_RATIO + GameSettings.WHEEL_HEIGHT_OFFSET
         val treadOffset = GameSettings.WHEEL_X_OFFSET
-        canvas.drawRoundRect(carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO - treadOffset, wheelY, carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO + wheelW - treadOffset, wheelY + wheelH, 4f, 4f, wheelPaint)
-        canvas.drawRoundRect(carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO_COMPLEMENT - wheelW + treadOffset, wheelY, carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO_COMPLEMENT + treadOffset, wheelY + wheelH, 4f, 4f, wheelPaint)
+        val tireTurnAngle = state.steeringInput * 25f // 視覚的なタイヤの切れ角
+
+        // 左前輪
+        canvas.save()
+        val wheelLX = carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO - treadOffset
+        canvas.rotate(tireTurnAngle, wheelLX + wheelW/2, wheelY + wheelH/2)
+        canvas.drawRoundRect(wheelLX, wheelY, wheelLX + wheelW, wheelY + wheelH, 4f, 4f, wheelPaint)
+        canvas.restore()
+
+        // 右前輪
+        canvas.save()
+        val wheelRX = carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO_COMPLEMENT - wheelW + treadOffset
+        canvas.rotate(tireTurnAngle, wheelRX + wheelW/2, wheelY + wheelH/2)
+        canvas.drawRoundRect(wheelRX, wheelY, wheelRX + wheelW, wheelY + wheelH, 4f, 4f, wheelPaint)
+        canvas.restore()
         
+        // 車体描画 (擬似3D厚み)
         original?.let { src ->
-            val numLayers = 30
+            val numLayers = 25
             val z0 = GameSettings.FOV / pixelsPerMeter
             val vpX = w / 2f
             
-            // 奥（フロント）から手前（リア）に向かって描画して厚みを出す（擬似3D化）
             for (i in numLayers downTo 0) {
                 val dist = (i.toFloat() / numLayers) * specs.lengthM
                 val ratio = z0 / (z0 + dist)
-                
                 val layerW = carW * ratio
                 val layerH = carH * ratio
-                
-                // 消失点に向かって座標をずらす
                 val layerX = vpX + (carX + carW / 2f - vpX) * ratio - layerW / 2f
                 val layerBottomY = horizon + (carBaseY + carH - horizon) * ratio
                 val layerBodyY = layerBottomY - layerH + (state.carVerticalShake + state.visualPitch) * ratio
                 
                 playerDstRect.set(layerX, layerBodyY, layerX + layerW, layerBodyY + layerH)
-                
-                // 奥のレイヤーを少し暗くして立体感を強調
                 if (i > 0) {
                     val darken = 0.7f + 0.3f * (1.0f - i.toFloat() / numLayers)
                     val c = (darken * 255).toInt().coerceIn(0, 255)
@@ -158,7 +169,6 @@ object GameGraphics {
                 } else {
                     mainPaint.colorFilter = null
                 }
-                
                 canvas.drawBitmap(src, null, playerDstRect, mainPaint)
             }
             mainPaint.colorFilter = null
@@ -186,14 +196,11 @@ object GameGraphics {
                 }
                 return true 
             }
-
             if (HDULayoutEditor.editorHandleRect.contains(x, y)) return true
-
             if (isTapEvent) {
                 val hitId = findHitUiId(x, y)
                 if (hitId != -1) { state.selectedUiId = hitId; return true }
             }
-            
             if (HDULayoutEditor.editorPanelRect.contains(x, y)) return true
         }
 
@@ -206,9 +213,7 @@ object GameGraphics {
         }
 
         if (HDU.settingsRect.contains(x, y)) { if (isTapEvent) state.isSettingsOpen = !state.isSettingsOpen; return true }
-        
         if (HDUMap.handleTouch(x, y, state, isTapEvent, context, musicPlayer)) return true
-
         if (HDU.mapRect.contains(x, y)) { if (isTapEvent) state.isMapLongRange = !state.isMapLongRange; return true }
 
         if (!state.isDeveloperMode) return false
