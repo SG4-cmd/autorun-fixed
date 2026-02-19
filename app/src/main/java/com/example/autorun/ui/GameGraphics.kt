@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
@@ -89,7 +90,7 @@ object GameGraphics {
         }
         RoadRenderer.draw(canvas, w, h, state, horizon)
         drawOpponentCars(canvas, w, h, state, specs)
-        drawPlayer(canvas, w, h, state, specs)
+        drawPlayer(canvas, w, h, state, specs, horizon)
         HDU.draw(canvas, w, h, state, currentFps, font7Bar, fontWarrior, fontJapanese, engineSound, musicPlayer, context)
     }
 
@@ -109,33 +110,65 @@ object GameGraphics {
         }
     }
 
-    private fun drawPlayer(canvas: Canvas, w: Float, h: Float, state: GameState, specs: VehicleSpecs) {
+    private fun drawPlayer(canvas: Canvas, w: Float, h: Float, state: GameState, specs: VehicleSpecs, horizon: Float) {
         val pixelsPerMeter = (w * 0.5f * GameSettings.ROAD_STRETCH) / GameSettings.ROAD_WIDTH
         val carW = pixelsPerMeter * specs.widthM; val original = playerBitmap
         val carH = original?.let { carW * (it.height.toFloat() / it.width.toFloat()) } ?: (carW * 0.4f)
         val carX = w / 2 - carW / 2; val carBaseY = h * DrawingConstants.PLAYER_CAR_Y_ANCHOR - carH
         val carBodyY = carBaseY + state.carVerticalShake + state.visualPitch
         val sunRelHeading = GameSettings.SUN_WORLD_HEADING - state.playerHeading
+        
         ShadowRenderer.drawCarShadow(canvas, playerBitmap, carX, carBaseY, carW, carH, sunRelHeading, specs.heightM, specs.lengthM, pixelsPerMeter)
+        
         canvas.save()
         canvas.rotate(state.visualTilt + state.roadShake, carX + carW / 2, carBaseY + carH / 2)
+        
+        // ホイールの描画
         val wheelW = pixelsPerMeter * specs.tireWidthM; val wheelH = carH * DrawingConstants.WHEEL_HEIGHT_TO_CAR_HEIGHT_RATIO
         val wheelY = carBaseY + carH * DrawingConstants.WHEEL_Y_OFFSET_TO_CAR_HEIGHT_RATIO + GameSettings.WHEEL_HEIGHT_OFFSET
         val treadOffset = GameSettings.WHEEL_X_OFFSET
         canvas.drawRoundRect(carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO - treadOffset, wheelY, carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO + wheelW - treadOffset, wheelY + wheelH, 4f, 4f, wheelPaint)
         canvas.drawRoundRect(carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO_COMPLEMENT - wheelW + treadOffset, wheelY, carX + carW * DrawingConstants.WHEEL_X_OFFSET_RATIO_COMPLEMENT + treadOffset, wheelY + wheelH, 4f, 4f, wheelPaint)
+        
         original?.let { src ->
-            val targetW = carW.toInt().coerceAtLeast(1); val targetH = carH.toInt().coerceAtLeast(1)
-            if (scaledPlayerBitmap == null || lastScaledWidth != targetW || lastScaledHeight != targetH) {
-                scaledPlayerBitmap?.recycle(); scaledPlayerBitmap = Bitmap.createScaledBitmap(src, targetW, targetH, true)
-                lastScaledWidth = targetW; lastScaledHeight = targetH
+            val numLayers = 30
+            val z0 = GameSettings.FOV / pixelsPerMeter
+            val vpX = w / 2f
+            
+            // 奥（フロント）から手前（リア）に向かって描画して厚みを出す（擬似3D化）
+            for (i in numLayers downTo 0) {
+                val dist = (i.toFloat() / numLayers) * specs.lengthM
+                val ratio = z0 / (z0 + dist)
+                
+                val layerW = carW * ratio
+                val layerH = carH * ratio
+                
+                // 消失点に向かって座標をずらす
+                val layerX = vpX + (carX + carW / 2f - vpX) * ratio - layerW / 2f
+                val layerBottomY = horizon + (carBaseY + carH - horizon) * ratio
+                val layerBodyY = layerBottomY - layerH + (state.carVerticalShake + state.visualPitch) * ratio
+                
+                playerDstRect.set(layerX, layerBodyY, layerX + layerW, layerBodyY + layerH)
+                
+                // 奥のレイヤーを少し暗くして立体感を強調
+                if (i > 0) {
+                    val darken = 0.7f + 0.3f * (1.0f - i.toFloat() / numLayers)
+                    val c = (darken * 255).toInt().coerceIn(0, 255)
+                    mainPaint.colorFilter = PorterDuffColorFilter(Color.rgb(c, c, c), PorterDuff.Mode.MULTIPLY)
+                } else {
+                    mainPaint.colorFilter = null
+                }
+                
+                canvas.drawBitmap(src, null, playerDstRect, mainPaint)
             }
-            scaledPlayerBitmap?.let { bitmap ->
+            mainPaint.colorFilter = null
+            
+            if (state.isBraking) {
                 playerDstRect.set(carX, carBodyY, carX + carW, carBodyY + carH)
-                canvas.drawBitmap(bitmap, null, playerDstRect, mainPaint)
-                if (state.isBraking) canvas.drawBitmap(bitmap, null, playerDstRect, brakePaint)
+                canvas.drawBitmap(src, null, playerDstRect, brakePaint)
             }
         }
+
         ShadowRenderer.drawCarGloss(canvas, carX, carBodyY, carW, carH, sunRelHeading)
         canvas.restore()
     }
