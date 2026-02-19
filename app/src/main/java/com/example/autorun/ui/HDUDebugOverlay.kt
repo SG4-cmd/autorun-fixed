@@ -12,6 +12,7 @@ import kotlin.math.*
 
 /**
  * 【HDUDebugOverlay: サウンド解析・メモリプロファイラ】
+ * 以前のデータの表示項目を反映。
  */
 object HDUDebugOverlay {
     private val paint = Paint().apply { isAntiAlias = true }
@@ -37,7 +38,6 @@ object HDUDebugOverlay {
     private val categoryRects = mutableMapOf<Category, RectF>()
     private val eqSliderRects = mutableMapOf<Int, RectF>()
     
-    // 音要素（オンオフ）用
     private val engineToggleRect = RectF()
     private val exhaustToggleRect = RectF()
     private val turboToggleRect = RectF()
@@ -45,7 +45,6 @@ object HDUDebugOverlay {
     private val brakeToggleRect = RectF()
     private val tireToggleRect = RectF()
     
-    // エンジン追加効果用
     private val jitterToggleRect = RectF()
     private val ghostToggleRect = RectF()
 
@@ -114,27 +113,30 @@ object HDUDebugOverlay {
     }
 
     private fun drawOverview(canvas: Canvas, rect: RectF, state: GameState, fps: Int) {
-        var y = rect.top; val lH = 60f
+        var y = rect.top; val lH = 50f
         paint.textSize = 22f
         drawValueBar(canvas, "FPS ", fps.toFloat(), 120f, rect.left, y, rect.width(), Color.GREEN); y += lH
         drawValueBar(canvas, "SPD ", state.calculatedSpeedKmH, 320f, rect.left, y, rect.width(), Color.CYAN); y += lH
         drawValueBar(canvas, "RPM ", state.engineRPM, 9000f, rect.left, y, rect.width(), Color.YELLOW); y += lH
         drawValueBar(canvas, "THR ", state.throttle * 100f, 100f, rect.left, y, rect.width(), Color.MAGENTA); y += lH
         drawValueBar(canvas, "BST ", (state.turboBoost + 1.0f) * 50f, 100f, rect.left, y, rect.width(), Color.RED); y += lH
+        
+        // 追加: 走行距離
+        val distKm = state.playerDistance / 1000f
+        val totalKm = CourseManager.getTotalDistance() / 1000f
+        drawValueBar(canvas, "DIST", distKm, totalKm, rect.left, y, rect.width(), Color.WHITE); y += lH
+        
         paint.color = Color.WHITE
-        canvas.drawText("GEAR: ${state.currentGear}", rect.left, y, paint)
+        canvas.drawText("GEAR: ${state.currentGear}", rect.left, y + 25f, paint)
+        canvas.drawText("LAT : ${String.format(Locale.US, "%.2f", state.lateralVelocity)}", rect.left + 200f, y + 25f, paint)
     }
 
     private fun drawPhysics(canvas: Canvas, rect: RectF, state: GameState) {
         var y = rect.top; val lH = 60f
         paint.textSize = 22f
-        // THROTTLE
         drawValueBar(canvas, "THR ", state.throttle * 100f, 100f, rect.left, y, rect.width(), Color.MAGENTA); y += lH
-        // TORQUE
         drawValueBar(canvas, "TRQ ", state.currentTorqueNm, 600f, rect.left, y, rect.width(), Color.parseColor("#FF8800")); y += lH
-        // LATERAL VELOCITY (Absolute for bar)
         drawValueBar(canvas, "LAT ", abs(state.lateralVelocity), 5f, rect.left, y, rect.width(), Color.CYAN); y += lH
-        // ALTITUDE (Normalized to 500m)
         val alt = CourseManager.getHeight(state.playerDistance / GameSettings.SEGMENT_LENGTH)
         drawValueBar(canvas, "ALT ", alt, 500f, rect.left, y, rect.width(), Color.LTGRAY)
     }
@@ -146,7 +148,7 @@ object HDUDebugOverlay {
         val barX = x + 180f
         val barW = width - 200f
         val barH = 30f
-        val progress = (value / maxVal).coerceIn(0f, 1f)
+        val progress = if (maxVal > 0) (value / maxVal).coerceIn(0f, 1f) else 0f
         
         paint.color = Color.DKGRAY; paint.alpha = 100; paint.style = Paint.Style.FILL
         canvas.drawRect(barX, y, barX + barW, y + barH, paint)

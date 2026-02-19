@@ -42,10 +42,10 @@ object HDUMap {
     private val flagStaffPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.parseColor("#666666") }
     private val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = Color.RED }
     
-    private val compassBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = Color.BLACK; alpha = 0 }
-    private val compassBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.WHITE; alpha = 0 }
-    private val compassTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = Color.WHITE; textSize = 28f; alpha = 0 }
-    private val compassIndicatorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 0f; color = Color.TRANSPARENT; alpha = 0 }
+    private val compassBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = Color.BLACK; alpha = 180 }
+    private val compassBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f; color = Color.WHITE; alpha = 255 }
+    private val compassTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL; color = Color.WHITE; textSize = 28f; alpha = 255 }
+    private val compassIndicatorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 3f; color = Color.RED; alpha = 255 }
 
     private val navTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textAlign = Paint.Align.RIGHT }
     
@@ -94,7 +94,6 @@ object HDUMap {
         } else if (state.navMode == GameState.NavMode.HOME) {
             val iconSize = 44f * uiScale
             btnSettingsRect.set(mapRect.right - iconSize - 35f * uiScale, mapRect.top + 35f * uiScale, mapRect.right - 35f * uiScale, mapRect.top + 35f * uiScale + iconSize)
-            // ライト切り替えボタンをナビの下（サイドボタンの下）に配置。今回はナビ画面下部に横並びで配置
             btnLightRect.set(mapRect.left + 35f * uiScale, mapRect.bottom - 80f * uiScale, mapRect.left + 200f * uiScale, mapRect.bottom - 20f * uiScale)
         }
     }
@@ -118,8 +117,6 @@ object HDUMap {
         }
         drawSideButtons(canvas, fontWarrior, state)
         drawCompass(canvas, state, compassRect, fontWarrior)
-        
-        // 施設接近通知の描画
         drawFacilityNotification(canvas, state, mapRect, fontWarrior)
     }
 
@@ -281,7 +278,6 @@ object HDUMap {
         navTextPaint.typeface = font; navTextPaint.textSize = 28f * uiScale; navTextPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(timeStrCache, mapRect.right - 20f * uiScale, mapRect.top + 45f * uiScale, navTextPaint)
         
-        // 次の施設までの距離を表示
         val playerKm = state.playerDistance / 1000f
         val nextObject = CourseManager.getRoadObjects().find { it.posKm > playerKm }
         if (nextObject != null) {
@@ -312,11 +308,17 @@ object HDUMap {
                 roadPaint.strokeWidth = 6f * uiScale; canvas.drawPath(miniMapPath, roadPaint)
             }
             canvas.drawCircle(offsetX, drawBottomY, 12f * uiScale, pointPaint); val gx = offsetX + coursePointsX[totalSegments] * scale; val gy = drawBottomY - totalSegments * scale; drawGoalFlag(canvas, gx, gy, uiScale)
+            
+            canvas.save(); canvas.translate(mx, my); canvas.rotate(state.playerHeadingDegrees)
+            updateTrianglePath(20f * uiScale); canvas.drawPath(arrowPath, arrowPaint); canvas.restore()
         } else {
             mx = mapX + mapW / 2f; my = mapY + mapH * 0.6f; val scale = uiScale * 0.5f; miniMapPath.reset(); miniMapPath.moveTo(mx, my)
             var fDX = 0f; var fX = 0f; for (i in 1..800) { fDX += CourseManager.getCurve((startSegment + i).toFloat()); fX += fDX; if (i % 15 == 0) miniMapPath.lineTo(mx + fX * scale, my - i * scale) }
             miniMapPath.moveTo(mx, my); var bDX = 0f; var bX = 0f; var startPointX = Float.NaN; var startPointY = Float.NaN; for (i in 1..600) { val target = startSegment - i; if (target < -1) break; bDX -= CourseManager.getCurve((target + 1).toFloat()); bX -= bDX; if (i % 15 == 0) miniMapPath.lineTo(mx + bX * scale, my + i * scale); if (target == 0) { startPointX = mx + bX * scale; startPointY = my + i * scale } }
             roadPaint.strokeWidth = 10f * uiScale; canvas.drawPath(miniMapPath, roadPaint); if (!startPointX.isNaN()) canvas.drawCircle(startPointX, startPointY, 18f * uiScale, pointPaint)
+            
+            canvas.save(); canvas.translate(mx, my); canvas.rotate(state.playerHeadingDegrees)
+            updateTrianglePath(25f * uiScale); canvas.drawPath(arrowPath, arrowPaint); canvas.restore()
         }
         canvas.restore()
     }
