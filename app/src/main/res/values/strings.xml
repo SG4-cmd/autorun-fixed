@@ -28,7 +28,7 @@
     <string name="shoulder_width_left">2.5</string>
     <string name="shoulder_width_right">1.0</string>
     <string name="lane_marker_width">0.2</string>
-    <string name="draw_distance">1000</string>
+    <string name="draw_distance">100</string>
     <string name="camera_height">1.5</string>
 
     <string name="sun_real_diameter_km">1392700.0</string>

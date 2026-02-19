@@ -38,7 +38,7 @@ object GameSettings {
     var SHOULDER_WIDTH_LEFT = 2.5f
     var SHOULDER_WIDTH_RIGHT = 1.0f
     var LANE_MARKER_WIDTH = 0.2f 
-    var DRAW_DISTANCE = 1000 
+    var DRAW_DISTANCE = 100
     var CAMERA_HEIGHT = 1.5f
 
     // --- 天体・方位設定 ---
