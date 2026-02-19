@@ -11,7 +11,7 @@ import java.nio.ShortBuffer
 
 /**
  * 【Vehicle3DRenderer】
- * 3Dモデルの向きとスケールを正しく補正して描画します。
+ * データベースの車両スペック（全幅・全高・全長）を3Dモデルに正確に反映させます。
  */
 object Vehicle3DRenderer {
 
@@ -55,23 +55,23 @@ object Vehicle3DRenderer {
         
         Matrix.setIdentityM(modelMatrix, 0)
         
-        // 1. 位置を合わせる
+        // 1. 位置合わせ（ワールド座標への移動）
+        // glTFモデルはGltfLoaderで接地補正済みのため yOffset は 0
         val yOffset = if (isGltfModel) 0.0f else 0.3f
         Matrix.translateM(modelMatrix, 0, state.playerWorldX, state.playerWorldY + yOffset, state.playerWorldZ)
         
-        // 2. 自車の向きに合わせて回転（Y軸）
+        // 2. 車両の向き（ヘディング回転）
         val rotationDeg = -Math.toDegrees(state.playerWorldHeading.toDouble()).toFloat()
         Matrix.rotateM(modelMatrix, 0, rotationDeg, 0f, 1f, 0f)
 
-        // 3. 【重要】縦向きを直すための補正回転（X軸を-90度回転させて水平にする）
+        // 3. モデル固有の補正回転（glTFの軸変換）
         if (isGltfModel) {
             Matrix.rotateM(modelMatrix, 0, -90f, 1f, 0f, 0f)
         }
 
-        // 4. スケール調整
-        if (!isGltfModel) {
-            Matrix.scaleM(modelMatrix, 0, specs.widthM, specs.heightM, specs.lengthM)
-        }
+        // 4. 【重要】データベースのスペック（m）に合わせてスケーリング
+        // GltfLoaderで1.0に正規化されているため、スペック値をそのまま掛ければ正確なサイズになります
+        Matrix.scaleM(modelMatrix, 0, specs.widthM, specs.heightM, specs.lengthM)
         
         Matrix.multiplyMM(mvpMatrix, 0, vPMatrix, 0, modelMatrix, 0)
 
