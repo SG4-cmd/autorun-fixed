@@ -53,6 +53,14 @@ object HDUDebugOverlay {
     private val memInfo = Debug.MemoryInfo()
     private val memoryHistory = FloatArray(120)
     private var historyIdx = 0
+    
+    // メモリ情報の更新頻度を制限するためのキャッシュ
+    private var memUpdateCounter = 0
+    private var cachedTotal = 0f
+    private var cachedJavaHeap = 0f
+    private var cachedGraphics = 0f
+    private var cachedCode = 0f
+    private var cachedOthers = 0f
 
     fun draw(canvas: Canvas, state: GameState, fps: Int, engineSound: EngineSoundRenderer?) {
         val posX = GameSettings.UI_POS_DEBUG_PANEL.x
@@ -201,20 +209,25 @@ object HDUDebugOverlay {
     }
     
     private fun drawMemoryInfo(canvas: Canvas, rect: RectF) {
-        Debug.getMemoryInfo(memInfo)
-        val total = memInfo.totalPss / 1024f
-        val javaHeap = try { memInfo.getMemoryStat("summary.java-heap").toInt() / 1024f } catch (e: Exception) { 0f }
-        val graphics = try { memInfo.getMemoryStat("summary.graphics").toInt() / 1024f } catch (e: Exception) { 0f }
-        val code = try { memInfo.getMemoryStat("summary.code").toInt() / 1024f } catch (e: Exception) { 0f }
-        val others = try { memInfo.getMemoryStat("summary.private-other").toInt() / 1024f } catch (e: Exception) { 0f }
-        memoryHistory[historyIdx] = total; historyIdx = (historyIdx + 1) % memoryHistory.size
+        // FPS向上のため、重いDebug.getMemoryInfoの実行を60フレームに1回に制限
+        if (memUpdateCounter % 60 == 0) {
+            Debug.getMemoryInfo(memInfo)
+            cachedTotal = memInfo.totalPss / 1024f
+            cachedJavaHeap = try { memInfo.getMemoryStat("summary.java-heap").toInt() / 1024f } catch (e: Exception) { 0f }
+            cachedGraphics = try { memInfo.getMemoryStat("summary.graphics").toInt() / 1024f } catch (e: Exception) { 0f }
+            cachedCode = try { memInfo.getMemoryStat("summary.code").toInt() / 1024f } catch (e: Exception) { 0f }
+            cachedOthers = try { memInfo.getMemoryStat("summary.private-other").toInt() / 1024f } catch (e: Exception) { 0f }
+            memoryHistory[historyIdx] = cachedTotal; historyIdx = (historyIdx + 1) % memoryHistory.size
+        }
+        memUpdateCounter++
+
         var y = rect.top; val lH = 35f
         paint.color = Color.WHITE; paint.textSize = 22f; paint.typeface = Typeface.MONOSPACE
-        canvas.drawText(String.format(Locale.US, "TOTAL     : %7.2f MB", total), rect.left, y, paint); y += lH
-        canvas.drawText(String.format(Locale.US, "JAVA HEAP : %7.2f MB", javaHeap), rect.left, y, paint); y += lH
-        canvas.drawText(String.format(Locale.US, "GRAPHICS  : %7.2f MB", graphics), rect.left, y, paint); y += lH
-        canvas.drawText(String.format(Locale.US, "CODE      : %7.2f MB", code), rect.left, y, paint); y += lH
-        canvas.drawText(String.format(Locale.US, "OTHERS    : %7.2f MB", others), rect.left, y, paint); y += lH
+        canvas.drawText(String.format(Locale.US, "TOTAL     : %7.2f MB", cachedTotal), rect.left, y, paint); y += lH
+        canvas.drawText(String.format(Locale.US, "JAVA HEAP : %7.2f MB", cachedJavaHeap), rect.left, y, paint); y += lH
+        canvas.drawText(String.format(Locale.US, "GRAPHICS  : %7.2f MB", cachedGraphics), rect.left, y, paint); y += lH
+        canvas.drawText(String.format(Locale.US, "CODE      : %7.2f MB", cachedCode), rect.left, y, paint); y += lH
+        canvas.drawText(String.format(Locale.US, "OTHERS    : %7.2f MB", cachedOthers), rect.left, y, paint); y += lH
         y += 20f; val graphRect = RectF(rect.left, y, rect.right, rect.bottom - 20f)
         drawMemoryGraph(canvas, graphRect)
     }
