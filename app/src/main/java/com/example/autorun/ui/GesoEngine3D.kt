@@ -4,6 +4,7 @@ import android.content.Context
 import android.opengl.GLES20
 import android.opengl.Matrix
 import com.example.autorun.core.GameState
+import com.example.autorun.data.vehicle.VehicleDatabase
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -22,6 +23,8 @@ object GesoEngine3D {
     var colorHandle: Int = -1
     var normalHandle: Int = -1
 
+    private var currentModelPath: String? = null
+
     fun init(context: Context) {
         GLES20.glClearColor(0.53f, 0.81f, 0.92f, 1.0f)
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
@@ -38,14 +41,20 @@ object GesoEngine3D {
         colorHandle = GLES20.glGetAttribLocation(program, "vColor")
         normalHandle = GLES20.glGetAttribLocation(program, "vNormal")
 
-        loadDefaultModel(context)
+        loadSelectedVehicleModel(context)
     }
 
-    private fun loadDefaultModel(context: Context) {
-        val model = GltfLoader.loadGlb(context, "car.glb")
+    /**
+     * 現在選択されている車両の3Dモデルを読み込みます。
+     */
+    fun loadSelectedVehicleModel(context: Context) {
+        val specs = VehicleDatabase.getSelectedVehicle()
+        if (specs.modelPath == currentModelPath) return
+        
+        val model = GltfLoader.loadGlb(context, specs.modelPath)
         if (model != null) {
-            // Vehicle3DRenderer.setModelData の引数を修正済みの定義に合わせる
             Vehicle3DRenderer.setModelData(model)
+            currentModelPath = specs.modelPath
         }
     }
 
@@ -55,7 +64,10 @@ object GesoEngine3D {
         Matrix.frustumM(projectionMatrix, 0, -ratio, ratio, -1f, 1f, 1.0f, 2000f)
     }
 
-    fun draw(state: GameState) {
+    fun draw(state: GameState, context: Context) {
+        // 必要に応じてモデルの更新をチェック
+        loadSelectedVehicleModel(context)
+
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         GLES20.glUseProgram(program)
 

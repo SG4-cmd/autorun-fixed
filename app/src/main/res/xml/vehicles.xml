@@ -6,6 +6,7 @@
     - id: 車両の一意識別子
     - name: ゲーム内に表示される名前
     - image: res/drawable 内の画像ファイル名
+    - modelPath: assets 内の 3D モデルファイル名 (.glb)
     - engineName: エンジンの型式・名称
     - driveType: 駆動方式 (4WD, FR, FF, MR, RR)
     - isRHD: 右ハンドルかどうか (true: 右, false: 左)
@@ -41,6 +42,7 @@
         id="A-1"
         name="GT-R (BNR32)"
         image="bnr32"
+        modelPath="car.glb"
         engineName="RB26DETT"
         driveType="4WD"
         isRHD="true"
@@ -75,6 +77,7 @@
         id="light_weight"
         name="Roadster"
         image="ic_launcher_foreground"
+        modelPath="car.glb"
         engineName="B6-ZE"
         driveType="FR"
         isRHD="true"
@@ -109,6 +112,7 @@
         id="heavy_muscle"
         name="Charger"
         image="ic_launcher_foreground"
+        modelPath="car.glb"
         engineName="V8 HEMI"
         driveType="FR"
         isRHD="false"

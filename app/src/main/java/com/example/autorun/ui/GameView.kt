@@ -49,7 +49,7 @@ class GameView(context: Context, attrs: AttributeSet? = null) : GLSurfaceView(co
 
     override fun onDrawFrame(gl: GL10?) {
         updatePhysics()
-        GesoEngine3D.draw(state)
+        GesoEngine3D.draw(state, context)
         
         // FPS計算 (Engine / 3D)
         fpsCount++

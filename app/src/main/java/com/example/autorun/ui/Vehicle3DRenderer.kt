@@ -12,6 +12,7 @@ import java.nio.ShortBuffer
 /**
  * 【Vehicle3DRenderer】
  * モデルを回転させた後の「底面」を計算し、地面にピッタリ接地させます。
+ * 加減速によるピッチングや路面の凹凸挙動も反映します。
  */
 object Vehicle3DRenderer {
 
@@ -58,16 +59,20 @@ object Vehicle3DRenderer {
         val rotationDeg = -Math.toDegrees(state.playerWorldHeading.toDouble()).toFloat()
         Matrix.rotateM(modelMatrix, 0, rotationDeg, 0f, 1f, 0f)
 
-        // 3. 【接地補正】
+        // 3. 【接地補正 + 挙動反映】
         // モデルは中央(0,0,0)にあり、-90度X回転させると、元のZ軸が「高さ(Y)」になります。
-        // スケーリング(specs.lengthM)を考慮した「底面から中心までの距離」を持ち上げることで接地させます。
         val scale = specs.lengthM
-        val yOffset = -modelMinZ * scale // modelMinZはマイナスの値なので、-でプラスにして持ち上げる
-        Matrix.translateM(modelMatrix, 0, 0f, yOffset, 0f)
+        val yOffset = -modelMinZ * scale 
+        
+        // 路面の凹凸やピッチングによる垂直方向の動きを追加
+        val bounceY = state.carVerticalShake * 0.05f 
+        Matrix.translateM(modelMatrix, 0, 0f, yOffset + bounceY, 0f)
 
-        // 4. 起き上がり補正（X軸回転）
+        // 4. 起き上がり補正 & ピッチング回転
         if (isGltfModel) {
             Matrix.rotateM(modelMatrix, 0, -90f, 1f, 0f, 0f)
+            // 加減速によるピッチング（前後の傾き）を反映
+            Matrix.rotateM(modelMatrix, 0, Math.toDegrees(state.visualPitch.toDouble()).toFloat(), 0f, 1f, 0f)
         }
 
         // 5. スケーリング

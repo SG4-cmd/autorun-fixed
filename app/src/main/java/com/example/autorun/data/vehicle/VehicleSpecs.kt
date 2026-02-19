@@ -25,6 +25,7 @@ data class VehicleSpecs(
     val id: String,
     val name: String,
     @DrawableRes val imageResId: Int,
+    val modelPath: String, // 3Dモデルのパス (assets内)
     val engineName: String,
     val driveType: String,
     val isRHD: Boolean = true, // 右ハンドル車かどうか

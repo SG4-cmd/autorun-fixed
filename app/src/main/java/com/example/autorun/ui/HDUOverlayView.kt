@@ -69,6 +69,7 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         checkDeveloperModeActivation(state)
 
         // HDUを描画 (UI FPS, エンジン音, 音楽プレーヤーを渡す)
+        // 以前は GesoEngine.drawAll を呼んでいましたが、UIのみを担当する HDU.draw に一本化しました。
         HDU.draw(canvas, w, h, state, currentFps, font7Bar, fontWarrior, fontWarrior, engineSound, musicPlayer, context)
         
         // 描画ループを継続
@@ -121,6 +122,11 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         val x = event.getX(actionIndex)
         val y = event.getY(actionIndex)
         val pointerId = event.getPointerId(actionIndex)
+
+        // GesoEngine.handleTouch による古いタッチ処理を HDU 側に寄せて整理
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+             if (HDU.handleSettingsTouch(x, y, state)) return true
+        }
 
         when (action) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
@@ -179,7 +185,6 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                 }
             }
             MotionEvent.ACTION_MOVE -> {
-                // 移動中にメーター外に出た場合の判定を更新（オプション）
                 updateMeterTouchState(event)
             }
         }

@@ -30,6 +30,7 @@ object VehicleDatabase {
                     id = parser.getAttributeValue(null, "id"),
                     name = parser.getAttributeValue(null, "name"),
                     imageResId = imageResId,
+                    modelPath = parser.getAttributeValue(null, "modelPath") ?: "car.glb",
                     engineName = parser.getAttributeValue(null, "engineName"),
                     driveType = parser.getAttributeValue(null, "driveType"),
                     isRHD = parser.getAttributeValue(null, "isRHD").toBoolean(),
