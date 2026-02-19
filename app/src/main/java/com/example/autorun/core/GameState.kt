@@ -1,6 +1,5 @@
 package com.example.autorun.core
 
-import com.example.autorun.utils.GameUtils
 import com.example.autorun.config.GamePerformanceSettings
 import com.example.autorun.config.GameSettings
 import com.example.autorun.data.vehicle.VehicleDatabase
@@ -9,8 +8,8 @@ import kotlin.math.*
 import java.util.Random
 
 /**
- * 【GameState: ゲームの動的状態管理】
- * 3D空間における車両の物理挙動とシステム状態を管理。
+ * 【GameState】
+ * 現在地をXYZ座標で管理。
  */
 class GameState {
     
@@ -37,16 +36,19 @@ class GameState {
     var throttleTouchY = 0f
     var isThrottleTouching = false
 
-    // --- 3D世界座標 ---
+    // --- 3D世界座標 & カメラ姿勢 ---
     var playerWorldX = 0f
     var playerWorldZ = 0f
     var playerWorldY = 0f
     var playerWorldHeading = 0f 
     var playerHeading: Float get() = playerWorldHeading; set(v) { playerWorldHeading = v }
+    
+    var cameraPitch = 0f
+    var cameraRoll = 0f
 
     val opponentCars = mutableListOf<OpponentCar>()
 
-    // --- システム・UI状態 ---
+    // --- システム・UI ---
     var navMode = NavMode.HOME 
     var isMapLongRange = false
     var isSettingsOpen = false
@@ -56,7 +58,6 @@ class GameState {
     var batteryLevel = 100
     var isHighBeam = false
     
-    // --- ラジオ状態 ---
     var radioBand = GameSettings.RADIO_BAND
     var radioFrequency = GameSettings.RADIO_FREQUENCY
     val RADIO_MIN = 76.0f
@@ -91,7 +92,7 @@ class GameState {
     var totalCurve = 0f 
     var playerHeadingDegrees = 0f 
     var visualTilt = 0f
-    var carVisualRotation = 0f
+    var carVisualRotation = 0f // 互換用
     var roadShake = 0f 
     var carVerticalShake = 0f 
     var gameTimeMillis = 0L
@@ -103,106 +104,51 @@ class GameState {
         val specs = VehicleDatabase.getSelectedVehicle()
         gameTimeMillis = (System.nanoTime() - startTimeNanos) / 1_000_000L
 
-        // ラジオ選局ロジック
-        if (radioBtnDir != 0) {
-            val now = System.currentTimeMillis()
-            if (radioBtnDownStartTime > 0 && now - radioBtnDownStartTime > 500) {
-                if (now - lastFreqChangeTime > 100) {
-                    radioFrequency = (radioFrequency + 0.1f * radioBtnDir).coerceIn(RADIO_MIN, RADIO_MAX)
-                    lastFreqChangeTime = now
-                }
-            }
-        }
-
-        // エンジン始動判定
+        // エンジン始動
         if (!isManualTransmission && isStalled && rawThrottleInput > 0.01f) {
-            isStalled = false
-            engineRPM = 800f 
+            isStalled = false; engineRPM = 800f 
         }
 
-        // スロットル
-        val throttleSpeed = if (rawThrottleInput > throttle) 5.0f else 8.0f
-        throttle += (rawThrottleInput - throttle) * throttleSpeed * dt
+        // 物理演算
+        throttle += (rawThrottleInput - throttle) * 6.0f * dt
         throttle = throttle.coerceIn(0f, 1f)
 
-        // 変速
-        if (!isManualTransmission && !isChangingGear && !isStalled) {
-            targetGear = CarPhysics.selectGearByRPM(currentGear, engineRPM, calculatedSpeedKmH, throttle, isStalled)
-        }
-        if (targetGear != currentGear && !isChangingGear && !isStalled) {
-            isChangingGear = true; gearChangeTimer = 0.5f
-        }
-        if (isChangingGear) {
-            gearChangeTimer -= dt
-            if (gearChangeTimer <= 0) {
-                isChangingGear = false
-                if (targetGear > currentGear) currentGear++ else if (targetGear < currentGear) currentGear--
-            }
-        }
-
-        // ターボ・トルク計算
-        if (!isStalled && specs.hasTurbo) {
-            val exhaustEnergy = ((engineRPM / 8000f).pow(1.5f) * (0.2f + throttle * 0.8f)).coerceIn(0f, 1.2f)
-            turbineInertia += (exhaustEnergy - turbineInertia) * 0.8f * dt
-            val thresholdRPM = specs.turboBoostRpm
-            val rpmFactor = ((engineRPM - thresholdRPM) / 3000f).coerceIn(0f, 1f)
-            val targetBoost = if (throttle < 0.15f) -0.6f else (turbineInertia * rpmFactor * 1.5f).coerceIn(0f, 1.2f)
-            turboBoost += (targetBoost - turboBoost) * 5f * dt
-            isTurboActive = turboBoost > 0.1f
-        }
-
         currentTorqueNm = CarPhysics.calculateTorque(engineRPM, isStalled, isTurboActive, throttle)
-        val rpmResult = CarPhysics.calculateRPM(engineRPM, currentTorqueNm, currentGear, currentSpeedMs, dt, isStalled, isChangingGear, isManualTransmission)
+        val rpmResult = CarPhysics.calculateRPM(engineRPM, currentTorqueNm, currentGear, currentSpeedMs, dt, isStalled, false, isManualTransmission)
         engineRPM = rpmResult.first
         isStalled = rpmResult.second
 
-        // 加速度・速度・距離
-        val currentSegFloat = (playerDistance / GameSettings.SEGMENT_LENGTH).coerceAtLeast(0f)
-        val slopeDeg = CourseManager.getCurrentAngle(currentSegFloat)
-        val accel = CarPhysics.calculateAcceleration(if (isChangingGear) 0f else currentTorqueNm, isBraking, currentSpeedMs, specs.weightKg, slopeDeg, currentGear, playerX)
-
+        val accel = CarPhysics.calculateAcceleration(currentTorqueNm, isBraking, currentSpeedMs, specs.weightKg, 0f, currentGear, playerX)
         currentSpeedMs = (currentSpeedMs + accel * dt).coerceAtLeast(0f)
         calculatedSpeedKmH = currentSpeedMs * 3.6f
 
-        // ハンドルと方位
         steeringInput = rawSteeringInput.coerceIn(-1.0f, 1.0f)
         if (currentSpeedMs > 0.5f) {
-            val turnSensitivity = 0.9f 
-            val turnRate = (steeringInput * turnSensitivity) * (currentSpeedMs / 15f).coerceIn(0.4f, 1.5f)
+            val turnRate = (steeringInput * 0.85f) * (currentSpeedMs / 18f).coerceIn(0.4f, 1.2f)
             playerWorldHeading += turnRate * dt
         }
 
-        // 世界座標
+        // 現在地をXYZで更新
         playerWorldX += sin(playerWorldHeading.toDouble()).toFloat() * currentSpeedMs * dt
         playerWorldZ += cos(playerWorldHeading.toDouble()).toFloat() * currentSpeedMs * dt
+        playerWorldY = CourseManager.getHeight((playerDistance / GameSettings.SEGMENT_LENGTH).coerceAtLeast(0f))
         
+        // 道路との相対位置を計算
+        val currentSegFloat = (playerDistance / GameSettings.SEGMENT_LENGTH).coerceAtLeast(0f)
         currentRoadCurve = CourseManager.getCurve(currentSegFloat)
         val roadH = CourseManager.getRoadWorldHeading(currentSegFloat)
-        val angleDiff = playerWorldHeading - roadH
-        val speedAlongRoad = currentSpeedMs * cos(angleDiff.toDouble()).toFloat()
+        val speedAlongRoad = currentSpeedMs * cos((playerWorldHeading - roadH).toDouble()).toFloat()
         playerDistance += speedAlongRoad * dt
         totalCurve += currentRoadCurve * (speedAlongRoad * dt / GameSettings.SEGMENT_LENGTH)
 
         val idealRoadX = CourseManager.getRoadWorldX(currentSegFloat)
         val idealRoadZ = CourseManager.getRoadWorldZ(currentSegFloat)
-        val dx = playerWorldX - idealRoadX
-        val dz = playerWorldZ - idealRoadZ
-        playerX = dx * cos(roadH.toDouble()).toFloat() - dz * sin(roadH.toDouble()).toFloat()
-
-        // 描画用プロパティ
+        playerX = (playerWorldX - idealRoadX) * cos(roadH.toDouble()).toFloat() - (playerWorldZ - idealRoadZ) * sin(roadH.toDouble()).toFloat()
+        
+        // ビジュアル・UI
+        visualPitch += ((accel / 12f) - visualPitch) * 0.15f
         visualEngineRPM += (engineRPM - visualEngineRPM) * 0.45f
         visualSpeedKmH += (calculatedSpeedKmH - visualSpeedKmH) * 0.25f
         playerHeadingDegrees = Math.toDegrees(playerWorldHeading.toDouble()).toFloat()
-
-        val weightFactor = specs.weightKg / 1400f
-        val targetPitch = (accel / 10f) * 3.75f * weightFactor
-        visualPitch += (targetPitch - visualPitch) * 0.15f
-
-        val leftWall = -(GameSettings.ROAD_WIDTH / 2f + GameSettings.SHOULDER_WIDTH_LEFT) + (specs.widthM / 2f)
-        val rightWall = (GameSettings.ROAD_WIDTH / 2f + GameSettings.SHOULDER_WIDTH_RIGHT) - (specs.widthM / 2f)
-        if (playerX < leftWall) { playerX = leftWall; currentSpeedMs *= 0.98f }
-        else if (playerX > rightWall) { playerX = rightWall; currentSpeedMs *= 0.98f }
-        
-        roadShake = if (isStalled) 0f else (sin(gameTimeMillis * 0.04f) * (0.04f + (currentTorqueNm / specs.maxTorqueNm * 0.08f))).toFloat()
     }
 }
