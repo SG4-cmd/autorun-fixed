@@ -39,7 +39,7 @@ object GameGraphics {
         const val WHEEL_X_OFFSET_RATIO_COMPLEMENT = 0.85f 
         const val CAR_SIZE_SCREEN_RATIO = 0.1936f
         // パフォーマンス向上のため、描画レイヤー数を削減 (25 -> 10)
-        const val CAR_3D_LAYERS = 10
+        const val CAR_3D_LAYERS = 1
     }
 
     private val mainPaint = Paint().apply { isAntiAlias = true; isFilterBitmap = true }
