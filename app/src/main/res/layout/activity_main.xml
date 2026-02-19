@@ -7,10 +7,22 @@
     android:layout_height="match_parent"
     tools:context=".ui.MainActivity">
 
+    <!-- 3D描画層 -->
     <com.example.autorun.ui.GameView
         android:id="@+id/game_view"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- 2D UI層 (メーター等) -->
+    <com.example.autorun.ui.HDUOverlayView
+        android:id="@+id/hdu_overlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@android:color/transparent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

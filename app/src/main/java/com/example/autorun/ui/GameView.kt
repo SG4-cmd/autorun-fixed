@@ -1,32 +1,25 @@
 package com.example.autorun.ui
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Rect
-import android.graphics.RectF
-import android.graphics.Typeface
+import android.graphics.PixelFormat
+import android.opengl.GLSurfaceView
 import android.util.AttributeSet
-import android.view.Choreographer
 import android.view.MotionEvent
-import android.view.View
 import androidx.core.content.res.ResourcesCompat
 import com.example.autorun.R
-import com.example.autorun.audio.BrakeSoundRenderer
-import com.example.autorun.audio.EngineSoundRenderer
-import com.example.autorun.audio.ExhaustSoundRenderer
-import com.example.autorun.audio.MusicPlayer
-import com.example.autorun.audio.TireSquealRenderer
-import com.example.autorun.audio.TurboSoundRenderer
-import com.example.autorun.audio.WindSoundRenderer
+import com.example.autorun.audio.*
 import com.example.autorun.config.GamePerformanceSettings
 import com.example.autorun.config.GameSettings
 import com.example.autorun.core.GameState
-import kotlin.math.abs
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
 import kotlin.math.atan2
 
-class GameView(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
+/**
+ * 【GameView: 3D描画と物理・音声の統合ビュー】
+ * GLSurfaceViewを継承し、ハードウェア加速された3Dグラフィックスを表示します。
+ */
+class GameView(context: Context, attrs: AttributeSet? = null) : GLSurfaceView(context, attrs), GLSurfaceView.Renderer {
 
     private val state = GameState()
     private val engineSound = EngineSoundRenderer()
@@ -36,77 +29,72 @@ class GameView(context: Context, attrs: AttributeSet? = null) : View(context, at
     private val brakeSound = BrakeSoundRenderer()
     private val tireSquealSound = TireSquealRenderer()
     private val musicPlayer = MusicPlayer(context)
-    private var frameCount = 0
-    private var lastFpsUpdateTime = 0L
-    private var currentFps = 0
-    private val steerBarRect = RectF()
 
-    private val font7Bar: Typeface? by lazy {
-        try { ResourcesCompat.getFont(context, R.font.gotikakutto_005_851) } catch (e: Exception) { Typeface.DEFAULT }
-    }
-    private val fontWarrior: Typeface? by lazy {
-        try { ResourcesCompat.getFont(context, R.font.gotikakutto_005_851) } catch (e: Exception) { Typeface.DEFAULT }
-    }
-    private val fontGotika: Typeface? by lazy {
-        try { ResourcesCompat.getFont(context, R.font.gotikakutto_005_851) } catch (e: Exception) { Typeface.DEFAULT }
-    }
-
-    private val debugTouchPointerIds = mutableSetOf<Int>()
-    private val steerStartPosX = mutableMapOf<Int, Float>()
-    private val steerStartAngle = mutableMapOf<Int, Float>()
-    private val steerInitialInput = mutableMapOf<Int, Float>()
-    private val throttleStartPosY = mutableMapOf<Int, Float>()
-
-    private var offscreenBitmap: Bitmap? = null
-    private var offscreenCanvas: Canvas? = null
-    private val renderPaint = Paint(Paint.FILTER_BITMAP_FLAG)
-    private var lastTargetWidth = -1
-    private var lastTargetHeight = -1
-
+    // 物理シミュレーション用のタイマー
     private var lastFrameTimeNanos: Long = 0L
     private var accumulator: Float = 0f
     private val fixedDt = GamePerformanceSettings.PHYSICS_DT
 
-    private val frameCallback = object : Choreographer.FrameCallback {
-        override fun doFrame(frameTimeNanos: Long) {
-            if (lastFrameTimeNanos == 0L) lastFrameTimeNanos = frameTimeNanos
-            val elapsedSeconds = (frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f
-            lastFrameTimeNanos = frameTimeNanos
-            val frameTime = elapsedSeconds.coerceAtMost(0.25f)
-            accumulator += frameTime
-            while (accumulator >= fixedDt) {
-                updateCameraByTouch() 
-                state.update()
-                accumulator -= fixedDt
-            }
-            engineSound.update(state.engineRPM, state.throttle, state.isTurboActive)
-            exhaustSound.update(state.engineRPM, state.throttle)
-            turboSound.update(state.engineRPM, state.throttle, if (state.isTurboActive) state.turboBoost else 0f)
-            windSound.update(state.calculatedSpeedKmH)
-            brakeSound.update(state.isBraking, state.calculatedSpeedKmH)
-            tireSquealSound.update(state.tireSlipRatio, state.calculatedSpeedKmH, state.isBraking)
-            invalidate()
-            Choreographer.getInstance().postFrameCallback(this)
-        }
-    }
-
-    private val activeCameraDirs = mutableSetOf<Int>() 
+    // 入力管理
+    private val steerStartAngle = mutableMapOf<Int, Float>()
+    private val steerInitialInput = mutableMapOf<Int, Float>()
+    private val throttleStartPosY = mutableMapOf<Int, Float>()
+    private val activeCameraDirs = mutableSetOf<Int>()
 
     init {
-        setLayerType(LAYER_TYPE_HARDWARE, null)
-        Choreographer.getInstance().postFrameCallback(frameCallback)
+        // OpenGL ES 2.0を使用するように設定
+        setEGLContextClientVersion(2)
+        setRenderer(this)
+        // 常に描画を更新
+        renderMode = RENDERMODE_CONTINUOUSLY
     }
 
-    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
-        super.onLayout(changed, left, top, right, bottom)
-        val w = width.toFloat(); val h = height.toFloat(); if (w <= 0 || h <= 0) return
-        HDU.updateLayoutRects(w, h)
+    fun getGameState(): GameState = state
+
+    // --- GLSurfaceView.Renderer の実装 ---
+
+    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        GesoEngine3D.init()
     }
 
-    override fun onDraw(canvas: Canvas) {
-        val w = width.toFloat(); val h = height.toFloat()
-        if (w == 0f || h == 0f) return
-        GameGraphics.drawAll(canvas, w, h, state, currentFps, steerBarRect, HDU.brakeRect, RectF(), font7Bar, fontWarrior, fontGotika, context, engineSound, musicPlayer)
+    override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+        GesoEngine3D.onSurfaceChanged(width, height)
+        // UIの座標系も更新（将来的にUIをオーバーレイする場合に備えて）
+        HDU.updateLayoutRects(width.toFloat(), height.toFloat())
+    }
+
+    override fun onDrawFrame(gl: GL10?) {
+        // 物理計算の更新
+        updatePhysics()
+        
+        // 3Dシーンの描画
+        GesoEngine3D.draw(state)
+    }
+
+    private fun updatePhysics() {
+        val currentTime = System.nanoTime()
+        if (lastFrameTimeNanos == 0L) lastFrameTimeNanos = currentTime
+        val elapsedSeconds = (currentTime - lastFrameTimeNanos) / 1_000_000_000f
+        lastFrameTimeNanos = currentTime
+        
+        accumulator += elapsedSeconds.coerceAtMost(0.25f)
+        while (accumulator >= fixedDt) {
+            updateCameraByTouch()
+            state.update()
+            accumulator -= fixedDt
+        }
+        
+        // 音声の更新
+        updateSounds()
+    }
+
+    private fun updateSounds() {
+        engineSound.update(state.engineRPM, state.throttle, state.isTurboActive)
+        exhaustSound.update(state.engineRPM, state.throttle)
+        turboSound.update(state.engineRPM, state.throttle, if (state.isTurboActive) state.turboBoost else 0f)
+        windSound.update(state.calculatedSpeedKmH)
+        brakeSound.update(state.isBraking, state.calculatedSpeedKmH)
+        tireSquealSound.update(state.tireSlipRatio, state.calculatedSpeedKmH, state.isBraking)
     }
 
     private fun updateCameraByTouch() {
@@ -118,6 +106,8 @@ class GameView(context: Context, attrs: AttributeSet? = null) : View(context, at
         if (activeCameraDirs.contains(4)) state.camZOffset += 0.5f
         if (activeCameraDirs.contains(5)) state.camZOffset -= 0.5f
     }
+
+    // --- タッチ入力の処理 ---
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val action = event.actionMasked
@@ -140,13 +130,14 @@ class GameView(context: Context, attrs: AttributeSet? = null) : View(context, at
                         steerStartAngle[pointerId] = Math.toDegrees(atan2((y - HDU.steerRect.centerY()).toDouble(), (x - HDU.steerRect.centerX()).toDouble())).toFloat()
                         steerInitialInput[pointerId] = state.steeringInput
                     }
-                    x < width * 0.45f -> steerStartPosX[pointerId] = x
+                    x < width * 0.45f -> { /* 左側ステアリングエリアの予備 */ }
                     else -> throttleStartPosY[pointerId] = y
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
-                activeCameraDirs.clear() 
-                steerStartPosX.remove(pointerId); steerStartAngle.remove(pointerId); throttleStartPosY.remove(pointerId)
+                activeCameraDirs.clear()
+                steerStartAngle.remove(pointerId)
+                throttleStartPosY.remove(pointerId)
             }
         }
 
