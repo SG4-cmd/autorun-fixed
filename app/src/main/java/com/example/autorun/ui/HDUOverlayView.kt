@@ -28,6 +28,15 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
         this.gameState = state
     }
 
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        val w = (right - left).toFloat()
+        val h = (bottom - top).toFloat()
+        if (w > 0 && h > 0) {
+            HDU.updateLayoutRects(w, h)
+        }
+    }
+
     override fun onDraw(canvas: Canvas) {
         val state = gameState ?: return
         val w = width.toFloat()
@@ -63,14 +72,8 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                     x > width * 0.5f -> throttleStartPosY[pointerId] = y
                 }
             }
-            MotionEvent.ACTION_MOVE -> {
-                // 移動中にボタンから指が外れた場合の処理をここで行うことも可能
-            }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
-                // どのボタンから離れたかに関わらず、離れたポインタに関連する入力をクリア
-                // 簡略化のため、ボタンの範囲外に出た場合も考慮して全スキャンを行う
                 state.activeCameraDirs.clear() 
-                // 指が複数ある場合、まだ押されているボタンを再登録
                 for (i in 0 until event.pointerCount) {
                     if (i == actionIndex) continue
                     val tx = event.getX(i); val ty = event.getY(i)
@@ -81,17 +84,14 @@ class HDUOverlayView(context: Context, attrs: AttributeSet? = null) : View(conte
                     if (HDU.camForwardRect.contains(tx, ty)) state.activeCameraDirs.add(4)
                     if (HDU.camBackwardRect.contains(tx, ty)) state.activeCameraDirs.add(5)
                 }
-
                 steerStartAngle.remove(pointerId)
                 throttleStartPosY.remove(pointerId)
-                
                 if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                     state.activeCameraDirs.clear()
                 }
             }
         }
 
-        // 入力の更新
         var sInput = 0f; var tInput = 0f; var br = false
         var isSteeringActive = false; var isThrottleActive = false
         for (i in 0 until event.pointerCount) {
